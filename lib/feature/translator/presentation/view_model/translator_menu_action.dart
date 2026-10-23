@@ -1,0 +1,1 @@
+enum TranslatorMenuAction { language, theme }

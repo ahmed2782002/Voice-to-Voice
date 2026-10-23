@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.voice.voice_to_voice"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

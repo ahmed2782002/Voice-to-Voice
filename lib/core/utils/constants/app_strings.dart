@@ -1,0 +1,66 @@
+abstract final class AppStrings {
+  static const String appName = 'app_name';
+  static const String aiNotice = 'ai_notice';
+  static const String sourceAudioTitle = 'source_audio_title';
+  static const String originalVoice = 'original_voice';
+  static const String sourceEmptyHint = 'source_empty_hint';
+  static const String recordingNow = 'recording_now';
+  static const String anyLanguageHint = 'any_language_hint';
+  static const String targetLanguageTitle = 'target_language_title';
+  static const String chooseLanguage = 'choose_language';
+  static const String searchLanguages = 'search_languages';
+  static const String noLanguagesFound = 'no_languages_found';
+  static const String supportedLanguagesCount = 'supported_languages_count';
+  static const String translateVoice = 'translate_voice';
+  static const String translating = 'translating';
+  static const String privacyNotice = 'privacy_notice';
+  static const String translatedVoiceTitle = 'translated_voice_title';
+  static const String translatedInto = 'translated_into';
+  static const String play = 'play';
+  static const String pause = 'pause';
+  static const String replay = 'replay';
+  static const String discardRecording = 'discard_recording';
+  static const String startRecording = 'start_recording';
+  static const String stopRecording = 'stop_recording';
+  static const String tryAgain = 'try_again';
+  static const String openSettings = 'open_settings';
+  static const String recordAgain = 'record_again';
+  static const String errorPermissionDenied = 'error_permission_denied';
+  static const String errorPermissionPermanentlyDenied =
+      'error_permission_permanently_denied';
+  static const String errorRecordingTooShort = 'error_recording_too_short';
+  static const String errorRecordingEmpty = 'error_recording_empty';
+  static const String errorRecordingTooLarge = 'error_recording_too_large';
+  static const String errorRecordingFailed = 'error_recording_failed';
+  static const String errorPlaybackFailed = 'error_playback_failed';
+  static const String errorNetwork = 'error_network';
+  static const String errorTimeout = 'error_timeout';
+  static const String errorServer = 'error_server';
+  static const String errorUnsupportedInput = 'error_unsupported_input';
+  static const String recordingLimitHint = 'recording_limit_hint';
+  static const String dismiss = 'dismiss';
+  static const String originalText = 'original_text';
+  static const String translatedText = 'translated_text';
+  static const String translatingHint = 'translating_hint';
+  static const String loadingLanguages = 'loading_languages';
+  static const String retryLanguages = 'retry_languages';
+  static const String errorLanguagesFailed = 'error_languages_failed';
+  static const String errorRateLimited = 'error_rate_limited';
+  static const String errorNoSpeech = 'error_no_speech';
+  static const String errorTextTooLong = 'error_text_too_long';
+  static const String errorBadRequest = 'error_bad_request';
+  static const String errorUnsupportedSourceLanguage =
+      'error_unsupported_source_language';
+  static const String errorUnsupportedTargetLanguage =
+      'error_unsupported_target_language';
+  static const String errorServiceUnavailable = 'error_service_unavailable';
+  static const String errorSessionFailed = 'error_session_failed';
+  static const String moreOptions = 'more_options';
+  static const String appLanguage = 'app_language';
+  static const String appTheme = 'app_theme';
+  static const String themeDark = 'theme_dark';
+  static const String themeLight = 'theme_light';
+  static const String languageArabic = 'language_arabic';
+  static const String languageEnglish = 'language_english';
+  static const String splashTagline = 'splash_tagline';
+}
