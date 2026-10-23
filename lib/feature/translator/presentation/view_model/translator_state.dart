@@ -36,6 +36,8 @@ enum TranslatorFailure {
   unsupportedTargetLanguage,
   serviceUnavailable,
   sessionFailed,
+  importFailed,
+  unsupportedFile,
 }
 
 class TranslatorState extends Equatable {
@@ -58,6 +60,7 @@ class TranslatorState extends Equatable {
     this.languages = const [],
     this.languagesStatus = LanguagesStatus.idle,
     this.showAiNotice = true,
+    this.sourceIsImported = false,
   });
 
   final RecordStatus recordStatus;
@@ -78,6 +81,7 @@ class TranslatorState extends Equatable {
   final List<TranslationLanguage> languages;
   final LanguagesStatus languagesStatus;
   final bool showAiNotice;
+  final bool sourceIsImported;
 
   bool get isRecording => recordStatus == RecordStatus.recording;
   bool get hasSource => recordStatus == RecordStatus.recorded;
@@ -86,6 +90,9 @@ class TranslatorState extends Equatable {
       translateStatus == TranslateStatus.ready && result != null;
   bool get canTranslate => hasSource && !isProcessing;
   bool get canRecord => !isProcessing;
+  bool get canImport => !isProcessing && !isRecording;
+  List<double> get sourceBars =>
+      sourceLevels.isEmpty ? translatedBars : sourceLevels;
   bool get canPickLanguage => !isProcessing && languages.isNotEmpty;
   bool get isLoadingLanguages => languagesStatus == LanguagesStatus.loading;
 
@@ -139,10 +146,14 @@ class TranslatorState extends Equatable {
       AppStrings.errorUnsupportedTargetLanguage,
     TranslatorFailure.serviceUnavailable => AppStrings.errorServiceUnavailable,
     TranslatorFailure.sessionFailed => AppStrings.errorSessionFailed,
+    TranslatorFailure.importFailed => AppStrings.errorImportFailed,
+    TranslatorFailure.unsupportedFile => AppStrings.errorUnsupportedFile,
   };
 
   String get failureAction => switch (failure) {
     TranslatorFailure.permissionPermanentlyDenied => AppStrings.openSettings,
+    TranslatorFailure.importFailed ||
+    TranslatorFailure.unsupportedFile => AppStrings.chooseAnotherFile,
     TranslatorFailure.recordingTooShort ||
     TranslatorFailure.recordingEmpty ||
     TranslatorFailure.recordingTooLarge ||
@@ -195,6 +206,7 @@ class TranslatorState extends Equatable {
     List<TranslationLanguage>? languages,
     LanguagesStatus? languagesStatus,
     bool? showAiNotice,
+    bool? sourceIsImported,
   }) {
     return TranslatorState(
       recordStatus: recordStatus ?? this.recordStatus,
@@ -215,6 +227,7 @@ class TranslatorState extends Equatable {
       languages: languages ?? this.languages,
       languagesStatus: languagesStatus ?? this.languagesStatus,
       showAiNotice: showAiNotice ?? this.showAiNotice,
+      sourceIsImported: sourceIsImported ?? this.sourceIsImported,
     );
   }
 
@@ -238,5 +251,6 @@ class TranslatorState extends Equatable {
     languages,
     languagesStatus,
     showAiNotice,
+    sourceIsImported,
   ];
 }

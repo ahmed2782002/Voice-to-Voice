@@ -63,4 +63,21 @@ abstract final class AppStrings {
   static const String languageArabic = 'language_arabic';
   static const String languageEnglish = 'language_english';
   static const String splashTagline = 'splash_tagline';
+  static const String aiVoiceLabel = 'ai_voice_label';
+  static const String importAudio = 'import_audio';
+  static const String importedAudio = 'imported_audio';
+  static const String importHint = 'import_hint';
+  static const String errorImportFailed = 'error_import_failed';
+  static const String errorUnsupportedFile = 'error_unsupported_file';
+  static const String chooseAnotherFile = 'choose_another_file';
+  static const String history = 'history';
+  static const String historyEmpty = 'history_empty';
+  static const String historyLocalNotice = 'history_local_notice';
+  static const String historyLoadFailed = 'history_load_failed';
+  static const String historyLanguagePair = 'history_language_pair';
+  static const String deleteEntry = 'delete_entry';
+  static const String clearHistory = 'clear_history';
+  static const String clearHistoryConfirm = 'clear_history_confirm';
+  static const String cancel = 'cancel';
+  static const String back = 'back';
 }

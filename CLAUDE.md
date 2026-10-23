@@ -19,7 +19,7 @@ Tests follow `lib/core/doc/code_test/WIDGET_TEST_GUIDELINES.md`, `UNIT_TEST_GUID
 
 ```
 lib/core/config/                SupabaseConfig (project URL, publishable key, functions URL)
-lib/core/services/audio/        recorder and player interfaces plus device implementations, limits
+lib/core/services/audio/        recorder, player and file picker interfaces plus device implementations, limits, import formats
 lib/core/services/auth/         AccessTokenProvider, SupabaseSessionService (silent anonymous sign-in)
 lib/core/services/preferences/  AiNoticeStore, PreferencesAiNoticeStore (AI notice shown until the first translation)
 lib/core/routing/               FadeRoute
@@ -28,6 +28,7 @@ lib/core/utils/constants/       AppPalette (dark and light), AppColors (context.
 lib/core/utils/format/          DurationFormat (localized digits)
 lib/core/widgets/               GlassCard, AudioWaveform, AudioControlButton, AppLogo, PulseRingsPainter, settings sheets (language, theme)
 lib/feature/splash/             SplashScreen, SplashStage, SplashMotion (pure animation curves)
+lib/feature/history/            local translation history: TranslationHistoryEntry, FileTranslationHistoryStore, HistoryCubit, HistoryScreen
 lib/feature/translator/
   data/model/                   TranslationLanguage, TranslationResult, TranslatorApiException
   data/repo/                    TranslatorRepo (GET /languages, POST /translate-voice)
@@ -39,6 +40,7 @@ test/helpers/                   fakes.dart, pump_app.dart
 test/feature/translator/        widget, cubit and repo tests
 test/feature/splash/            splash motion and screen tests
 test/core/theme/                ThemeCubit tests
+test/feature/history/           history store and cubit tests
 assets/branding/                app icon, adaptive icon layers, native splash logo
 ```
 

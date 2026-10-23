@@ -8,12 +8,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/supabase_config.dart';
+import 'core/services/audio/audio_player_service.dart';
+import 'core/services/audio/device_audio_file_picker.dart';
 import 'core/services/audio/device_audio_player_service.dart';
 import 'core/services/audio/device_audio_recorder_service.dart';
 import 'core/services/auth/supabase_session_service.dart';
 import 'core/services/preferences/preferences_ai_notice_store.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_cubit.dart';
+import 'feature/history/data/repo/file_translation_history_store.dart';
+import 'feature/history/data/repo/translation_history_store.dart';
 import 'feature/splash/presentation/view/screen/splash_screen.dart';
 import 'feature/translator/data/repo/translator_repo.dart';
 import 'feature/translator/presentation/view/screen/translator_screen.dart';
@@ -57,37 +61,48 @@ class VoxBridgeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
+    final history = FileTranslationHistoryStore();
+    return MultiRepositoryProvider(
       providers: [
-        BlocProvider(create: (_) => ThemeCubit(preferences)),
-        BlocProvider(
-          create: (_) => TranslatorCubit(
-            recorder: DeviceAudioRecorderService(),
-            player: DeviceAudioPlayerService(),
-            translate: repo.translateVoice,
-            loadLanguages: repo.fetchLanguages,
-            aiNotice: PreferencesAiNoticeStore(preferences),
-          )..loadLanguages(),
+        RepositoryProvider<TranslationHistoryStore>.value(value: history),
+        RepositoryProvider<CreateAudioPlayer>.value(
+          value: DeviceAudioPlayerService.new,
         ),
       ],
-      child: ScreenUtilInit(
-        designSize: const Size(390, 844),
-        minTextAdapt: true,
-        builder: (context, _) => BlocBuilder<ThemeCubit, ThemeMode>(
-          builder: (context, themeMode) => MaterialApp(
-            title: 'VoxBridge',
-            debugShowCheckedModeBanner: false,
-            localizationsDelegates: context.localizationDelegates,
-            supportedLocales: context.supportedLocales,
-            locale: context.locale,
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: themeMode,
-            builder: (context, child) => MediaQuery.withClampedTextScaling(
-              maxScaleFactor: 1.6,
-              child: child ?? const SizedBox.shrink(),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(create: (_) => ThemeCubit(preferences)),
+          BlocProvider(
+            create: (_) => TranslatorCubit(
+              recorder: DeviceAudioRecorderService(),
+              player: DeviceAudioPlayerService(),
+              translate: repo.translateVoice,
+              loadLanguages: repo.fetchLanguages,
+              picker: DeviceAudioFilePicker(),
+              saveToHistory: history.save,
+              aiNotice: PreferencesAiNoticeStore(preferences),
+            )..loadLanguages(),
+          ),
+        ],
+        child: ScreenUtilInit(
+          designSize: const Size(390, 844),
+          minTextAdapt: true,
+          builder: (context, _) => BlocBuilder<ThemeCubit, ThemeMode>(
+            builder: (context, themeMode) => MaterialApp(
+              title: 'VoxBridge',
+              debugShowCheckedModeBanner: false,
+              localizationsDelegates: context.localizationDelegates,
+              supportedLocales: context.supportedLocales,
+              locale: context.locale,
+              theme: AppTheme.light,
+              darkTheme: AppTheme.dark,
+              themeMode: themeMode,
+              builder: (context, child) => MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.6,
+                child: child ?? const SizedBox.shrink(),
+              ),
+              home: SplashScreen(next: (_) => const TranslatorScreen()),
             ),
-            home: SplashScreen(next: (_) => const TranslatorScreen()),
           ),
         ),
       ),

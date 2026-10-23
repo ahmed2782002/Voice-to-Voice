@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:voice_to_voice/core/services/audio/audio_file_picker.dart';
 import 'package:voice_to_voice/core/services/audio/audio_player_service.dart';
 import 'package:voice_to_voice/core/services/audio/audio_recorder_service.dart';
 import 'package:voice_to_voice/core/services/auth/access_token_provider.dart';
 import 'package:voice_to_voice/core/services/preferences/ai_notice_store.dart';
+import 'package:voice_to_voice/feature/history/data/model/translation_history_entry.dart';
+import 'package:voice_to_voice/feature/history/data/repo/translation_history_store.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translation_language.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translation_result.dart';
 
@@ -82,6 +85,9 @@ class FakeAudioPlayerService implements AudioPlayerService {
   Stream<bool> get playingChanges => playing.stream;
 
   @override
+  Future<Duration?> probeDuration(String path) async => trackDuration;
+
+  @override
   Future<Duration?> open(String path) async {
     if (failOnOpen) throw const FileSystemException('cannot open');
     openedPath = path;
@@ -126,6 +132,7 @@ class FakeTranslator {
   Object? error;
   String originalText = '';
   String translatedText = '';
+  String? sourceLanguageCode;
 
   int get calls => requests.length;
 
@@ -142,6 +149,7 @@ class FakeTranslator {
         language: language,
         originalText: originalText,
         translatedText: translatedText,
+        sourceLanguageCode: sourceLanguageCode,
       ),
     );
   }
@@ -200,5 +208,48 @@ class FakeAiNoticeStore implements AiNoticeStore {
   Future<void> markSeen() async {
     markSeenCalls++;
     seen = true;
+  }
+}
+
+class FakeAudioFilePicker implements AudioFilePicker {
+  String? pickedPath = '/tmp/source_import.mp3';
+  Object? error;
+  int calls = 0;
+
+  @override
+  Future<String?> pick() async {
+    calls++;
+    if (error != null) throw error!;
+    return pickedPath;
+  }
+}
+
+class FakeHistoryStore implements TranslationHistoryStore {
+  final List<TranslationHistoryEntry> entries = [];
+  final List<(TranslationResult, String)> saved = [];
+  final List<String> deleted = [];
+  Object? loadError;
+  int clearCalls = 0;
+
+  @override
+  Future<List<TranslationHistoryEntry>> load() async {
+    if (loadError != null) throw loadError!;
+    return List.of(entries);
+  }
+
+  @override
+  Future<void> save(TranslationResult result, String sourceName) async =>
+      saved.add((result, sourceName));
+
+  @override
+  Future<void> delete(String id) async {
+    deleted.add(id);
+    entries.removeWhere((entry) => entry.id == id);
+  }
+
+  @override
+  Future<void> clear() async {
+    clearCalls++;
+    entries.clear();
   }
 }

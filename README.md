@@ -1,8 +1,8 @@
 # VoxBridge: Multilingual Voice-to-Voice Translator
 
-VoxBridge is a Flutter app that translates speech into speech. The user records a message in any supported language, picks a target language, and gets back a recording that says the same thing in the target language.
+VoxBridge is a Flutter app that translates speech into speech. The user records a message (or imports an audio file) in any supported language, picks a target language, and gets back a playable recording that says the same thing in that language, together with the original and translated text.
 
-> **Current phase: UI and on-device audio.** The interface, all of its states, microphone recording, playback and the full target-language list work now. The OpenAI translation call and its backend are **not connected yet**. Translation goes through a clearly marked UI-phase mock (`TranslationResult.fetch`, see [Processing flow](#processing-flow)). The mock is not a working integration, and it will be replaced by real OpenAI responses before the final demonstration.
+Translation runs through real OpenAI models behind a Supabase Edge Functions backend. The OpenAI key exists only on that backend.
 
 ---
 
@@ -12,17 +12,19 @@ VoxBridge is a Flutter app that translates speech into speech. The user records 
 2. [Versions](#versions)
 3. [Setup and run](#setup-and-run)
 4. [Configuration](#configuration)
-5. [Models used](#models-used)
-6. [Architecture](#architecture)
-7. [Processing flow](#processing-flow)
-8. [User interface and states](#user-interface-and-states)
-9. [Language coverage](#language-coverage)
-10. [Languages tested](#languages-tested)
-11. [Recording and file limits](#recording-and-file-limits)
-12. [Audio privacy and API security](#audio-privacy-and-api-security)
-13. [Tests](#tests)
-14. [Platforms and devices tested](#platforms-and-devices-tested)
-15. [Known issues and limitations](#known-issues-and-limitations)
+5. [Backend service](#backend-service)
+6. [Models used](#models-used)
+7. [Architecture](#architecture)
+8. [Processing flow](#processing-flow)
+9. [User interface and states](#user-interface-and-states)
+10. [Language coverage](#language-coverage)
+11. [Languages tested](#languages-tested)
+12. [Recording and file limits](#recording-and-file-limits)
+13. [Audio privacy and API security](#audio-privacy-and-api-security)
+14. [Tests](#tests)
+15. [Manual end-to-end test log](#manual-end-to-end-test-log)
+16. [Platforms and devices tested](#platforms-and-devices-tested)
+17. [Known issues and limitations](#known-issues-and-limitations)
 
 ---
 
@@ -30,22 +32,30 @@ VoxBridge is a Flutter app that translates speech into speech. The user records 
 
 | Requirement | Status |
 |---|---|
-| Record, stop, preview, discard and re-record inside the app | ✅ Done (`record`, `just_audio`) |
-| Request microphone permission, handle denied and permanently denied | ✅ Done (`permission_handler`) |
-| Target selector listing every OpenAI-supported spoken-output language | ✅ Done, 57 languages, with search |
-| Any source language accepted (no source selector, language is auto-detected) | ✅ UI done. Detection depends on the backend model |
-| Idle, recording, processing, ready-to-play and error states | ✅ Done |
-| Duplicate-submit prevention and retry after recoverable failures | ✅ Done |
-| Visible notice that the translated voice is AI-generated | ✅ Done (top banner) |
-| Notice that audio is sent for processing | ✅ Done (under the Translate button) |
-| Play, pause and replay for the original and translated recordings, no overlapping audio | ✅ Done (one shared player) |
-| Same recording re-submitted for another target language | ✅ Done |
-| Temporary audio cleanup, resource release on close or backgrounding | ✅ Done |
-| Arabic and English UI, RTL | ✅ Done (`easy_localization`) |
-| Automated tests for state transitions and failure handling | ✅ 29 tests passing |
-| Real OpenAI translation through a backend | ⏳ Next phase |
-| Backend or serverless service with source code and access restriction | ⏳ Next phase |
-| Android APK, screen recording, sample input/output audio | ⏳ After integration |
+| Record, stop, preview, discard and re-record inside the app | ✅ `record` + `just_audio` |
+| Microphone permission requested, denial and permanent denial handled | ✅ `permission_handler`, retry and "open settings" paths |
+| Any supported source language accepted, auto-detected | ✅ Backend detects the spoken language |
+| Every supported target language in the selector, no fixed subset | ✅ 57 languages loaded from `GET /languages`, searchable |
+| Playable translated audio that keeps names, numbers and questions | ✅ Verified with real OpenAI responses (see [test log](#manual-end-to-end-test-log)) |
+| Translate only: no answering, summarising or added content | ✅ Verified on a recording that contains a question |
+| Original and translated recordings clearly distinguished, play/pause/replay | ✅ Separate cards, one shared player, no overlapping audio |
+| Same recording re-submitted for another target language | ✅ Verified on device (English to Arabic, then to Japanese) |
+| New recording or translation without restarting | ✅ |
+| Idle, recording, processing, ready-to-play and error states | ✅ |
+| Duplicate-submit prevention, retry after recoverable failures | ✅ Retry for network, timeout, `RATE_LIMITED`, `UPSTREAM_*` |
+| Permission denial, empty/invalid recording, network/API failures | ✅ Each mapped to a clear message and recovery action |
+| A failed request never appears as a successful translation | ✅ Covered by tests |
+| Clear notice that the translated voice is AI-generated | ✅ Banner until the first translation, plus a permanent "AI-generated voice" label on every result |
+| Clear notice that audio is sent for processing | ✅ Under the Translate button |
+| Recording and file limits documented, temporary files cleaned up | ✅ See [limits](#recording-and-file-limits) |
+| Resources released on navigation, backgrounding and repeated actions | ✅ Playback/recording paused on background and when opening history |
+| OpenAI key kept off the app, on a backend | ✅ Supabase Edge Functions, anonymous session + `requireUser` |
+| Separate presentation, application logic and API/audio services | ✅ See [architecture](#architecture) |
+| Automated tests for state transitions and failure handling | ✅ 109 tests |
+| Optional: import existing audio files | ✅ mp3, m4a, mp4, wav, webm, ogg/opus, flac |
+| Optional: show original and translated text | ✅ |
+| Optional: local translation history with deletion | ✅ On device only, delete one or all |
+| Optional: additional mobile platform | ⚠️ iOS project configured, not built or tested (no macOS machine) |
 
 ## Versions
 
@@ -53,9 +63,9 @@ VoxBridge is a Flutter app that translates speech into speech. The user records 
 |---|---|
 | Flutter | 3.47.1 (stable) |
 | Dart | 3.13.1 |
-| Android | `minSdk` = Flutter default (`flutter.minSdkVersion`) |
+| Android | `minSdk` 24 (Flutter default), `compileSdk` 37 |
 
-Main packages: `flutter_bloc` 9.1, `equatable` 3.0, `flutter_screenutil` 5.9, `easy_localization` 3.0, `record` 7.1, `just_audio` 0.10, `permission_handler` 13.0, `path_provider` 2.1, `shimmer` 4.0. Dev: `bloc_test` 10.0.
+Main packages: `flutter_bloc`, `equatable`, `supabase_flutter`, `http`, `record`, `just_audio`, `permission_handler`, `path_provider`, `file_picker`, `shared_preferences`, `easy_localization`, `flutter_screenutil`, `shimmer`, `flutter_native_splash`. Dev: `bloc_test`, `flutter_launcher_icons`.
 
 ## Setup and run
 
@@ -66,15 +76,22 @@ flutter pub get
 flutter run
 ```
 
-Build an Android APK:
+Build the Android APK:
 
 ```bash
 flutter build apk --release
 ```
 
-The APK is written to `build/app/outputs/flutter-apk/app-release.apk`.
+The APK is written to `build/app/outputs/flutter-apk/app-release.apk`. The release build is signed with the debug key so it installs directly for review; it is not a store build.
 
-**iOS only:** after the first `flutter build ios`, the generated `ios/Podfile` must enable the microphone permission for `permission_handler`:
+Regenerate the launcher icon and native splash after changing `assets/branding/`:
+
+```bash
+dart run flutter_launcher_icons
+dart run flutter_native_splash:create
+```
+
+**iOS only:** the generated `ios/Podfile` must enable the microphone permission for `permission_handler`:
 
 ```ruby
 post_install do |installer|
@@ -92,206 +109,240 @@ end
 
 ## Configuration
 
-The current UI phase needs no configuration and no secrets.
+All app configuration is in `lib/core/config/supabase_config.dart`:
 
-For the integration phase, the app will only know the URL of the supporting service. It is passed at build time and is never stored in the repository:
+| Value | Purpose |
+|---|---|
+| `url` | Supabase project URL |
+| `publishableKey` | Supabase publishable key (public by design, identifies the project) |
+| `functionsUrl` | `<url>/functions/v1` |
 
-```bash
-flutter run --dart-define=TRANSLATION_API_URL=https://<your-service-host>
+The publishable key is not a secret and cannot call OpenAI by itself. Every function also requires a signed-in user's JWT. To point the app at another project, replace both values with your own:
+
+```dart
+static const String url = 'https://<your-project-ref>.supabase.co';
+static const String publishableKey = '<your-publishable-key>';
 ```
 
-The OpenAI key lives only on the service, as an environment variable such as `OPENAI_API_KEY=<placeholder>`. See [Audio privacy and API security](#audio-privacy-and-api-security).
+The app contains **no OpenAI key, no Supabase secret key and no service-role key**.
 
-Platform configuration already in the repository:
+Platform configuration:
 
 | File | Setting |
 |---|---|
 | `android/app/src/main/AndroidManifest.xml` | `RECORD_AUDIO`, `INTERNET` |
 | `ios/Runner/Info.plist` | `NSMicrophoneUsageDescription`, `en` and `ar` localizations |
 
+## Backend service
+
+The supporting service is a set of Supabase Edge Functions. **Source code and setup instructions: `<link or path to supabase/functions>`.**
+
+Contract used by the app:
+
+| Endpoint | Request | Response |
+|---|---|---|
+| `GET /functions/v1/languages` | `Authorization: Bearer <user JWT>`, `apikey` | `{"source": [...], "target": [...], "references": {"input": "...", "output": "..."}}`, each item `{code, name, native, input, output}` |
+| `POST /functions/v1/translate-voice` | multipart: `audio` (file), `targetLanguage`, optional `sourceLanguage` | `{sourceLanguage, targetLanguage, originalText, translatedText, audio: {mimeType, base64}, aiGenerated}` |
+
+Errors are always `{"error": {"code", "message", "retryable"}}`. The app maps every code to an Arabic and English message:
+
+| Code | HTTP | App behaviour |
+|---|---|---|
+| `BAD_REQUEST` | 400 | "Record again" |
+| `UNAUTHORIZED` | 401 | Refreshes the session once, then "Try again" |
+| `EMPTY_RECORDING` | 422 | "Record again" |
+| `FILE_TOO_LARGE` | 413 | "Record again" |
+| `UNSUPPORTED_TARGET_LANGUAGE` | 400 | "OK", pick another language |
+| `UNSUPPORTED_SOURCE_LANGUAGE` | per backend | "Record again" |
+| `NO_SPEECH`, `TEXT_TOO_LONG` | per backend | "Record again" |
+| `UNSUPPORTED_INPUT` | 422 | "Record again" |
+| `RATE_LIMITED` | 429 | "Try again" (retryable) |
+| `UPSTREAM_ERROR`, `UPSTREAM_UNREACHABLE` | 502 | "Try again" (retryable) |
+| `UPSTREAM_TIMEOUT` | 504 | "Try again" (retryable) |
+| `SERVER_MISCONFIGURED` | 500 | "OK", try later |
+
+Access is restricted to signed-in Supabase users: the app signs in anonymously and silently, and every function calls `requireUser`. The publishable key alone returns `401 UNAUTHORIZED`.
+
 ## Models used
 
-The assessment team provides the designated OpenAI model separately. **It is not wired in yet.** This section will list the exact model IDs once the backend is connected.
+| Step | Model |
+|---|---|
+| Speech to text, with language detection | `<transcription model ID>` |
+| Text translation | `<translation model ID>` |
+| Text to speech | `<speech model ID>`, voice `<voice>` |
 
-The language list in this README comes from OpenAI's official speech references (see [Language coverage](#language-coverage)). The app adds no other AI model or third-party AI service.
+The backend returns the translated speech as `audio/mpeg`. The app adds no other AI model or third-party AI service.
 
 ## Architecture
 
-The app has three layers, as the assessment asks: presentation, application logic, and API/audio services.
+Three layers, one Cubit per screen:
 
 ```
 lib/
-├── main.dart                               EasyLocalization + ScreenUtil + BlocProvider
-├── core/
-│   ├── services/audio/
-│   │   ├── audio_recorder_service.dart     interface: permission, start/stop, amplitude, files
-│   │   ├── device_audio_recorder_service.dart   record + permission_handler + path_provider
-│   │   ├── audio_player_service.dart       interface: open/play/pause/replay/stop
-│   │   ├── device_audio_player_service.dart     just_audio
-│   │   └── audio_limits.dart               duration, size, silence and timeout limits
-│   ├── utils/constants/                    AppColors, AppText, AppIcons, AppStrings, AppRadii, AppShadows
-│   ├── utils/format/duration_format.dart   0:12 / 0:34 with Arabic digits in Arabic
-│   └── widgets/                            GlassCard, AudioWaveform, AudioControlButton
-└── feature/translator/
-    ├── mock_model/
-    │   ├── translation_language.dart       the 57 supported target languages
-    │   └── translation_result.dart         UI-phase translation mock
-    └── presentation/
-        ├── view/screen/translator_screen.dart
-        ├── view/widgets/                   header, banner, cards, selector, sheet, buttons
-        └── view_model/translator_cubit.dart + translator_state.dart
+  core/
+    config/          SupabaseConfig
+    services/audio/  recorder, player, file picker interfaces and device implementations, limits
+    services/auth/   AccessTokenProvider, SupabaseSessionService (silent anonymous sign-in)
+    services/preferences/  AI-notice flag
+    theme/           light and dark ThemeData, ThemeCubit
+    utils/           palette, text styles, icons, strings, formatting
+    widgets/         shared widgets (cards, waveform, sheets, dialogs, logo)
+  feature/
+    splash/          animated splash
+    translator/
+      data/model/    TranslationLanguage, TranslationResult, TranslatorApiException
+      data/repo/     TranslatorRepo (HTTP calls, parsing, error mapping)
+      presentation/  TranslatorScreen, widgets, TranslatorCubit, TranslatorState
+    history/
+      data/          TranslationHistoryEntry, FileTranslationHistoryStore
+      presentation/  HistoryScreen, widgets, HistoryCubit, HistoryState
 ```
 
-**State management: Cubit (`flutter_bloc`).** The screen goes through a sequence of async steps: permission, recording, validation, upload, playback. A Cubit keeps that sequence in one testable class with no `BuildContext`, and `bloc_test` can check the order of states. Riverpod or plain `ChangeNotifier` would also work, but Cubit plus an `Equatable` state gives explicit, comparable states with very little boilerplate.
+| Layer | Responsibility |
+|---|---|
+| Presentation | Stateless screens and widgets. They render state and forward taps. |
+| Application logic | `TranslatorCubit`, `HistoryCubit`, `ThemeCubit`: every state transition, validation, retry decision and resource cleanup. |
+| API and audio services | `TranslatorRepo`, `SupabaseSessionService`, `DeviceAudioRecorderService`, `DeviceAudioPlayerService`, `DeviceAudioFilePicker`, `FileTranslationHistoryStore`, all behind interfaces so tests use fakes. |
 
-State design choices:
-
-- `RecordStatus` (`idle · recording · recorded`) and `TranslateStatus` (`idle · processing · ready`) are closed enums, not a set of booleans that could combine into impossible states.
-- `TranslatorFailure` is a closed enum. The UI maps each value to a localized message and a recovery action.
-- Every translation request carries a sequence number. A response that arrives after the user discarded the recording or changed the target is dropped, and its file is deleted.
-- The audio services sit behind interfaces, so tests inject fakes and never touch platform channels.
+**Why Cubit.** The screen is a small state machine: idle, recording, recorded, processing, ready, error. Its transitions come from user taps and async results. A Cubit keeps that logic in plain methods with a single immutable state, is easy to unit-test without widgets, and avoids the event boilerplate of a full Bloc. Stale async results are dropped with a request counter, so a late response can never overwrite a newer recording.
 
 ## Processing flow
 
 ```
- ┌──────────┐   tap mic    ┌────────────┐   tap stop   ┌──────────────┐
- │   idle   │ ───────────▶ │ recording  │ ───────────▶ │  validation  │
- └──────────┘  permission  └────────────┘  or 2-min cap └──────┬───────┘
-      ▲          granted         │ live waveform + timer       │ ok
-      │                          ▼                             ▼
-      │  denied → error + retry / open settings        ┌──────────────┐
-      │                                                │   recorded   │ preview · discard · re-record
-      │                                                └──────┬───────┘
-      │                                                       │ Translate (single-flight)
-      │                                                       ▼
-      │                                                ┌──────────────┐
-      │   network · timeout · server error → retry     │  processing  │ shimmer, controls locked
-      │ ◀───────────────────────────────────────────── └──────┬───────┘
-      │                                                       ▼
-      │                                                ┌──────────────┐
-      └──────────── new recording / discard ◀───────── │    ready     │ play · pause · replay
-                                                       └──────────────┘
-                      change target language → result cleared, same recording re-submittable
+Record (AAC-LC .m4a)  or  Import file (mp3/m4a/wav/ogg/webm/flac)
+        │  client checks: ≥ 1 s, 2 KB – 5 MB, supported extension, not silent
+        ▼
+TranslatorRepo ── Authorization: Bearer <anonymous JWT>, apikey ──▶ POST /translate-voice
+        │                                                     backend: validate → transcribe
+        │                                                     → translate → synthesize
+        ▼
+200 JSON: texts + base64 audio ──▶ decoded to a temp .mp3 ──▶ player
+        │
+        └──▶ copied to on-device history (optional feature)
 ```
 
-**Current translation step (UI phase).** `TranslationResult.fetch` waits 2 seconds and returns a **copy of the original recording** as a placeholder "translated" file. This lets the processing, ready and playback states be exercised on a device. It does **not** translate anything, and it is not presented as a real result to reviewers.
-
-**Planned translation step.** The app uploads the recording (`.m4a`, AAC) together with the target language code to the supporting service. The service calls the designated OpenAI model(s) with instructions to translate only, never answer, summarize or add content, and to keep names, numbers and details exactly. It returns the spoken translation as audio. The Cubit already maps `SocketException` to a network error, `TimeoutException` (60 s) to a timeout, `FormatException` to unsupported input, and anything else to a server error. A failure never produces a ready state.
+Session handling: `SupabaseSessionService` signs in anonymously when there is no session, refreshes an expired one, and re-signs in if refresh fails. A `401` from a function triggers one retry with a fresh token.
 
 ## User interface and states
 
-The design follows the provided "Dark UI — Royal Violet" mock-up, using its four palettes: Obsidian Cyan `#0ABACF`, Royal Violet (amethyst), Midnight Mint and Sunset Coral (slate).
-
-| Area | Behavior |
+| State | What the user sees |
 |---|---|
-| Header | VoxBridge logo, plus an Arabic/English switch that changes the whole app at once, RTL included |
-| AI notice | Sunset Coral banner: "AI-generated translation. The translated voice is not a human recording." |
-| Error card | Appears under the banner, so it is always visible, with a message and one recovery action (Try again, Record again, or Open settings) |
-| Source Audio card | Idle hint with the limits, then a live red waveform and timer while recording, then a waveform with play, pause, replay, discard and a time readout |
-| Target Language | Field opening a bottom sheet with all 57 languages (English plus native name) and search |
-| Translate Voice | Cyan-to-violet pill. Disabled with no recording and during processing, which prevents duplicate submissions. A privacy line underneath |
-| Translated Voice card | Midnight Mint card with the target language, waveform progress, play, pause, replay and time |
-| Processing | Shimmer placeholder in the shape of the result card |
-| Mic button | Glowing gradient circle. Turns coral with a stop icon while recording and pulses with the input level |
+| Idle | Hint, limits, supported import formats |
+| Recording | Live waveform, timer, stop button |
+| Recorded or imported | Waveform, play/pause/replay, discard |
+| Processing | Shimmer card with "This can take up to a minute", disabled Translate button |
+| Ready | Translated card with "AI-generated voice" label, play/pause/replay, original and translated text |
+| Error | Error card with a message and one recovery action (Try again, Record again, Choose another file, Open settings, OK) |
 
-Design choices that differ from the mock-up:
-
-- The **settings gear** was left out because it has no action in this scope.
-- **Flags** are not shown next to languages. A language is not a country (Arabic is spoken in more than 20 countries), so each option shows the English and native names instead.
+Also: animated splash, dark and light themes (saved), Arabic and English UI with full RTL (saved), header menu with History, App language and Appearance.
 
 ## Language coverage
 
-**Target (spoken output): 57 languages, all of them in the selector.** OpenAI's text-to-speech guide states that the TTS model "generally follows the Whisper model in terms of language support" and lists these languages:
+`GET /languages` returns **57 input languages and 57 output languages**, every language listed in OpenAI's official references:
 
-Afrikaans, Arabic, Armenian, Azerbaijani, Belarusian, Bosnian, Bulgarian, Catalan, Chinese, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, Galician, German, Greek, Hebrew, Hindi, Hungarian, Icelandic, Indonesian, Italian, Japanese, Kannada, Kazakh, Korean, Latvian, Lithuanian, Macedonian, Malay, Marathi, Maori, Nepali, Norwegian, Persian, Polish, Portuguese, Romanian, Russian, Serbian, Slovak, Slovenian, Spanish, Swahili, Swedish, Tagalog, Tamil, Thai, Turkish, Ukrainian, Urdu, Vietnamese, Welsh.
+- Input (speech to text): https://platform.openai.com/docs/guides/speech-to-text#supported-languages
+- Output (text to speech): https://platform.openai.com/docs/guides/text-to-speech#supported-languages
 
-The list lives in a single place, `TranslationLanguage.supported`, and a widget test checks that the picker reports all 57.
+The app shows every language whose `output` flag is true as a target and accepts speech in any language whose `input` flag is true (auto-detected). Nothing is hard-coded in the app.
 
-**Source (audio input): any supported language, auto-detected.** The app has no source-language selector, so it never limits what the user can say. Which input languages are accepted depends on the designated transcription or audio model. OpenAI's speech-to-text guide documents this per model (the Whisper language list for `whisper-1`, and the `languages` parameter for newer transcription models). The exact input list will be recorded here once the designated model is confirmed.
-
-Official references:
-
-- Supported input languages: <https://developers.openai.com/api/docs/guides/speech-to-text#supported-languages>
-- Supported output languages: <https://developers.openai.com/api/docs/guides/text-to-speech#supported-languages>
+Afrikaans (af), Arabic (ar), Armenian (hy), Azerbaijani (az), Belarusian (be), Bosnian (bs), Bulgarian (bg), Catalan (ca), Chinese (zh), Croatian (hr), Czech (cs), Danish (da), Dutch (nl), English (en), Estonian (et), Finnish (fi), French (fr), Galician (gl), German (de), Greek (el), Hebrew (he), Hindi (hi), Hungarian (hu), Icelandic (is), Indonesian (id), Italian (it), Japanese (ja), Kannada (kn), Kazakh (kk), Korean (ko), Latvian (lv), Lithuanian (lt), Macedonian (mk), Malay (ms), Maori (mi), Marathi (mr), Nepali (ne), Norwegian (no), Persian (fa), Polish (pl), Portuguese (pt), Romanian (ro), Russian (ru), Serbian (sr), Slovak (sk), Slovenian (sl), Spanish (es), Swahili (sw), Swedish (sv), Tagalog (tl), Tamil (ta), Thai (th), Turkish (tr), Ukrainian (uk), Urdu (ur), Vietnamese (vi), Welsh (cy).
 
 ## Languages tested
 
-| Kind | Languages |
-|---|---|
-| App UI language (manual and automated) | English, Arabic (RTL) |
-| End-to-end voice translation | **None yet.** This needs the real OpenAI integration. Sample recordings will include a name, a number and a question, and the tested pairs will be listed here |
+Tested with real OpenAI responses on 23 October 2026:
+
+| Source | Target | Where | Result |
+|---|---|---|---|
+| English | Arabic | API and Android device | ✅ Name, time, gate number and question kept |
+| Arabic | English | API (input was the Arabic MP3 output) | ✅ |
+| English | Japanese | API and Android device | ✅ |
+| English | Spanish (source sent explicitly) | API | ✅ |
+
+The sample sentence: "Hello, my name is Ahmed Hassan. My flight lands at 7:30 on Thursday, gate 14. Can you meet me at the airport?" It contains a name, numbers and a question.
+
+All other supported pairs are untested but go through the same pipeline. Reviewers can pick any pair in the selector.
 
 ## Recording and file limits
 
 | Limit | Value | Where |
 |---|---|---|
-| Maximum recording length | 2 minutes (recording stops automatically) | `AudioLimits.maxRecording` |
-| Minimum recording length | 1 second (shorter is rejected as "too short") | `AudioLimits.minRecording` |
-| Maximum file size | 25 MB (OpenAI audio upload limit) | `AudioLimits.maxFileBytes` |
-| Silence detection | Peak input level below 5% is rejected as "no voice detected" | `AudioLimits.silenceThreshold` |
-| Translation timeout | 60 seconds | `AudioLimits.translationTimeout` |
-| Format | AAC-LC `.m4a`, mono, 44.1 kHz, 64 kbps (about 1 MB for 2 minutes) | `DeviceAudioRecorderService` |
+| Maximum recording length | 2 minutes (auto-stop) | `AudioLimits.maxRecording` |
+| Minimum recording length | 1 second | `AudioLimits.minRecording` |
+| Minimum file size | 2 KB (server `EMPTY_RECORDING`) | `AudioLimits.minFileBytes` |
+| Maximum file size | 5 MB (server `FILE_TOO_LARGE`) | `AudioLimits.maxFileBytes` |
+| Recording format | AAC-LC, `.m4a`, 44.1 kHz mono, 64 kbps | `DeviceAudioRecorderService` |
+| Import formats | mp3, mpeg, mpga, m4a, mp4, wav, webm, ogg, opus, flac | `AudioLimits.importExtensions` |
+| Client timeout per translation | 90 seconds | `AudioLimits.translationTimeout` |
+| Saved history | Up to 50 translations, on device | `FileTranslationHistoryStore.maxEntries` |
 
-**Temporary files.** Recordings are written to the OS temporary directory. A file is deleted when the user discards or re-records, when a new translation replaces an old result, when the target language changes (the old translated file only), when a stale response arrives, and when the screen's Cubit closes. When the app goes to the background, recording stops and playback pauses.
+Temporary files (recordings, imported copies, decoded translated audio) live in the app's temp directory. They are deleted when the user discards, re-records, imports another file, changes the target language, or closes the screen.
 
 ## Audio privacy and API security
 
-- **No API key exists in the app, its assets or this repository.** The UI phase makes no network calls.
-- **Planned supporting service** (next phase): a small serverless function. It holds the permanent `OPENAI_API_KEY` as a server-side secret and exposes a single translate endpoint. During the assessment, access will be restricted with a per-reviewer access token sent in a request header, plus rate limiting. The token will be shared separately and never committed. The service's source code and setup steps will be added to this repository.
-- **Recordings are not retained.** The service will process audio in memory and keep nothing. On the device, the temporary files are deleted as described above.
-- The UI tells the user that their recording is sent to a server for translation (the line under the Translate button), and labels the result as AI-generated.
+- The OpenAI key lives only in the backend's secrets. It is not in the app, its assets, its build configuration, or this repository.
+- The app holds only the Supabase publishable key, which is public by design. Every function requires a signed-in user's JWT, so the key alone cannot use the service.
+- Users never see a login screen: the app signs in anonymously and silently, and the session is persisted by `supabase_flutter`.
+- The UI says, before sending, that the recording is sent to the server for translation and is not stored.
+- Translation history is **local to the device only**, holds the translated audio and text, and can be deleted per item or all at once.
+- In debug builds only, the raw `/languages` response is printed once. No audio, transcript or token is logged.
 
 ## Tests
 
 ```bash
+flutter analyze
 flutter test
 ```
 
-**Result: 29 tests, all passing** (Flutter 3.47.1, Windows host).
+Result: `No issues found`, **109 tests passed**.
 
-The tests follow `lib/core/doc/code_test/`. Fakes replace the recorder, the player, the translation call and the clock (`test/helpers/fakes.dart`). `test/helpers/pump_app.dart` pumps the screen with real `easy_localization` and ScreenUtil.
-
-**Widget tests**: `test/feature/translator/translator_screen_test.dart` (16 tests)
-
-| Group | What is checked |
+| File | Covers |
 |---|---|
-| idle | AI notice, empty hint and default target are visible. Translate does nothing without a recording |
-| recording | Live timer while recording. Original-voice controls after stopping. Recordings under 1 s rejected and deleted. Silent recordings rejected. Discard removes the card and deletes the file |
-| microphone permission | Denied: error, then retry starts recording once granted. Permanently denied: "Open settings" opens app settings |
-| translation | Shimmer while processing, and a second tap does not resubmit. Network error shows retry and no result, and retry succeeds. 60 s timeout. Changing the target clears the old result, deletes its file and re-submits the same recording in the new language. Play and pause on the translated voice |
-| localization and layout | Arabic copy renders with no overflow on a 320×640 screen. The picker reports all 57 languages |
+| `test/feature/translator/translator_cubit_test.dart` | Recording states and limits, permission denial, every API error code mapped to its failure, retry, stale results dropped, import (cancel, unsupported type, size, picker failure), history saving, AI notice, languages loading and retry, cleanup on close |
+| `test/feature/translator/translator_screen_test.dart` | Widget flows: recording, permission, processing and duplicate submit, network error and retry, timeout, rate limit, target change, playback, import, AI-voice label, history screen (delete one, delete all with confirmation), header menu, Arabic layout on a small phone |
+| `test/feature/translator/translator_repo_test.dart` | Language response shapes, headers, 401 refresh, multipart upload and file types, size validation, error parsing |
+| `test/feature/history/*` | File store (save, order, delete, clear, 50-entry limit), HistoryCubit (play, pause, switch, delete, clear, failures) |
+| `test/feature/splash/*`, `test/core/theme/*` | Splash animation and navigation, theme persistence |
 
-**Cubit tests**: `test/feature/translator/translator_cubit_test.dart` (13 tests)
+Automated tests use fakes for the recorder, player, picker, network and storage. They do not call OpenAI.
 
-- State order idle → recording → recorded, with the measured duration
-- Permission denial never starts the recorder
-- Files over 25 MB are rejected and deleted
-- Recording stops automatically at 2 minutes
-- A recorder start failure becomes `recordingFailed`
-- Translation order processing → ready
-- An HTTP failure maps to `server` and never becomes ready
-- A format error maps to `unsupportedInput`
-- A stale response after discard is dropped and its file deleted
-- The same recording can be re-translated into another language
-- Switching tracks stops the previous one, so audio never overlaps
-- A playback failure keeps the recording
-- `close()` deletes temporary files and disposes the recorder and player
+## Manual end-to-end test log
 
-**Manual end-to-end tests.** None are recorded yet. They will be logged here after the OpenAI integration, with device, language pair, input text, output and result.
+Date: 23 October 2026. Backend: live Supabase project. Real OpenAI responses.
+
+| # | Scenario | Steps | Result |
+|---|---|---|---|
+| 1 | Full translation (API) | `POST /translate-voice` with an English WAV, target `ar` | ✅ 200 in ~10 s, correct Arabic text and MP3 audio |
+| 2 | Reverse pair, non-m4a input | Arabic MP3 from #1, target `en` | ✅ 200, faithful English |
+| 3 | Other targets | English WAV to `ja`, and to `es` with `sourceLanguage=en` | ✅ 200 |
+| 4 | Empty recording | 1.5 KB file | ✅ 422 `EMPTY_RECORDING` |
+| 5 | Unsupported format | 4 KB random bytes | ✅ 422 `UNSUPPORTED_INPUT` |
+| 6 | File too large | 6 MB file | ✅ 413 `FILE_TOO_LARGE` |
+| 7 | Unsupported or missing target | `targetLanguage=xx`, then none | ✅ 400 `UNSUPPORTED_TARGET_LANGUAGE`, 400 `BAD_REQUEST` |
+| 8 | No session | Publishable key only | ✅ 401 `UNAUTHORIZED` |
+| 9 | Languages | `GET /languages` with an anonymous session | ✅ 57 input, 57 output, official references |
+| 10 | Device: import and translate | Release APK on Android 9, import WAV from Downloads, target Arabic | ✅ Imported label and 0:11 duration, translated card with AI label, texts, 0:12 audio |
+| 11 | Device: playback | Play translated audio | ✅ Progress and waveform advance, pause and replay available |
+| 12 | Device: same recording, new target | Pick Japanese, translate again | ✅ New Japanese audio and text |
+| 13 | Device: history | Menu, then Translation history | ✅ Both translations listed with language pair and date |
+| 14 | Device: AI notice | First translation | ✅ Banner hidden afterwards, AI-voice label stays on each result |
+
+Network failure, microphone denial and empty recording on device are covered by automated widget tests and are shown in the demo recording.
 
 ## Platforms and devices tested
 
-| Platform | Status |
-|---|---|
-| Android | Compiles to a debug APK. Not yet run on a physical device or emulator |
-| iOS | Not built yet (needs a macOS host) |
-| Automated tests | Windows 10 host, `flutter test` |
+| Platform | Device | Build | Status |
+|---|---|---|---|
+| Android 9 | LDPlayer emulator, 540×960 | Release APK | ✅ Tested |
+| Flutter test VM | — | — | ✅ 109 tests |
+| iOS | — | — | ⚠️ Configured, not built or tested (no macOS machine) |
 
 ## Known issues and limitations
 
-- **Translation is mocked in this phase.** The "translated voice" is a copy of the original recording. Real OpenAI translation and the backend are the next milestone.
-- The input-language list depends on the designated OpenAI model, which has not been confirmed.
-- Model-related translation errors cannot be assessed until the integration exists.
-- The waveform in the Translated Voice card is decorative. The source waveform comes from the real microphone input level.
-- The silence threshold (5%) is a heuristic. A very quiet speaker on a weak microphone could be rejected as silent and asked to record again.
-- Widget tests need an extra async flush after a recording stops, because cancelling a broadcast-stream subscription completes outside the fake test clock. This affects only the test helper, not the app.
+- **iOS is untested.** The project, permissions and Podfile snippet are in place, but no iOS build was made.
+- **TTS voices are tuned for English.** OpenAI notes that its voices are optimised for English, so other languages may sound accented.
+- **No manual source-language picker.** The source language is always auto-detected. Very short or mixed-language recordings can be detected as the wrong language.
+- **Model translation errors.** None were seen in the tested samples. As with any model, idioms, rare names and homophones can be mistranslated, and the app cannot detect that.
+- **Release signing.** The APK is signed with the debug key for easy installation. A store release needs a real signing key.
+- **Native splash is always dark.** The OS splash shows before the app knows the saved theme, so light-mode users see a brief dark frame.
+- **Imported files** are limited by size (5 MB), not duration. A long, highly compressed file can exceed the backend's text limit and return `TEXT_TOO_LONG`.
+- **History** keeps the newest 50 translations and stores only translated audio and text, never the original recording.

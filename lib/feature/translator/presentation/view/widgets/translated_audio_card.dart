@@ -9,6 +9,7 @@ import '../../../../../core/utils/format/duration_format.dart';
 import '../../../../../core/widgets/glass_card/glass_card.dart';
 import '../../../../../core/widgets/waveform/audio_waveform.dart';
 import '../../view_model/translator_state.dart';
+import 'ai_voice_badge.dart';
 import 'playback_controls.dart';
 import 'transcript_section.dart';
 
@@ -37,9 +38,17 @@ class TranslatedAudioCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            AppStrings.translatedVoiceTitle.tr(),
-            style: context.text.title.copyWith(color: context.colors.mint),
+          Wrap(
+            spacing: 8.w,
+            runSpacing: 4.h,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                AppStrings.translatedVoiceTitle.tr(),
+                style: context.text.title.copyWith(color: context.colors.mint),
+              ),
+              if (state.result?.aiGenerated ?? true) const AiVoiceBadge(),
+            ],
           ),
           Text(
             AppStrings.translatedInto.tr(args: [language.displayName]),

@@ -21,4 +21,10 @@ abstract final class AppIcons {
   static const IconData lightMode = Icons.light_mode_rounded;
   static const IconData radioOn = Icons.radio_button_checked_rounded;
   static const IconData radioOff = Icons.radio_button_off_rounded;
+  static const IconData aiVoice = Icons.auto_awesome_rounded;
+  static const IconData upload = Icons.upload_file_rounded;
+  static const IconData history = Icons.history_rounded;
+  static const IconData back = Icons.arrow_back_rounded;
+  static const IconData deleteAll = Icons.delete_sweep_outlined;
+  static const IconData audioFile = Icons.audio_file_rounded;
 }

@@ -203,6 +203,32 @@ void main() {
       });
 
       test(
+        'uploads an imported file with its own type and extension',
+        () async {
+          final repo = buildRepo([
+            json({
+              'sourceLanguage': 'es',
+              'targetLanguage': 'ar',
+              'originalText': 'Hola',
+              'translatedText': 'مرحبا',
+              'audio': {'mimeType': 'audio/mpeg', 'base64': audio},
+            }, 200),
+          ]);
+          final file = File('${directory.path}/source_import.ogg');
+          await file.writeAsBytes(List.filled(4096, 1));
+
+          await repo.translateVoice(
+            sourcePath: file.path,
+            language: TranslationLanguage.arabic,
+          );
+
+          final body = requests.single.body;
+          expect(body, contains('filename="recording.ogg"'));
+          expect(body, contains('content-type: audio/ogg'));
+        },
+      );
+
+      test(
         'rejects a recording under 2 KB without calling the server',
         () async {
           final repo = buildRepo([]);

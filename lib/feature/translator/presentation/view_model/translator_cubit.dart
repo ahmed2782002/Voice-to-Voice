@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/services/audio/audio_file_picker.dart';
 import '../../../../core/services/audio/audio_limits.dart';
 import '../../../../core/services/audio/audio_player_service.dart';
 import '../../../../core/services/audio/audio_recorder_service.dart';
@@ -20,6 +21,8 @@ class TranslatorCubit extends Cubit<TranslatorState> {
     required this._player,
     required this._translate,
     required this._loadLanguages,
+    required this._picker,
+    required this._saveToHistory,
     required AiNoticeStore aiNotice,
     DateTime Function()? clock,
   }) : _aiNotice = aiNotice,
@@ -35,6 +38,8 @@ class TranslatorCubit extends Cubit<TranslatorState> {
   final AiNoticeStore _aiNotice;
   final TranslateVoice _translate;
   final LoadLanguages _loadLanguages;
+  final AudioFilePicker _picker;
+  final SaveTranslation _saveToHistory;
   final TextEditingController searchController = TextEditingController();
   final DateTime Function() _clock;
   DateTime? _startedAt;
@@ -71,6 +76,48 @@ class TranslatorCubit extends Cubit<TranslatorState> {
           failure: state.failure ?? TranslatorFailure.languagesFailed,
         ),
       );
+    }
+  }
+
+  Future<void> importAudio() async {
+    if (_recordingTransition || !state.canImport) return;
+    _recordingTransition = true;
+    String? path;
+    try {
+      await _stopPlayback();
+      path = await _picker.pick();
+      if (isClosed || path == null) return;
+      final failure = await _validateImport(path);
+      if (isClosed) return;
+      if (failure != null) {
+        await _recorder.deleteFile(path);
+        emit(state.copyWith(failure: failure));
+        return;
+      }
+      final duration = await _probe(path);
+      if (isClosed) return;
+      _request++;
+      await _deleteRecordings();
+      emit(
+        TranslatorState(
+          recordStatus: RecordStatus.recorded,
+          sourcePath: path,
+          sourceDuration: duration,
+          sourceIsImported: true,
+          language: state.language,
+          searchQuery: state.searchQuery,
+          languages: state.languages,
+          languagesStatus: state.languagesStatus,
+          showAiNotice: state.showAiNotice,
+        ),
+      );
+    } catch (_) {
+      if (path != null) await _recorder.deleteFile(path);
+      if (!isClosed) {
+        emit(state.copyWith(failure: TranslatorFailure.importFailed));
+      }
+    } finally {
+      _recordingTransition = false;
     }
   }
 
@@ -234,6 +281,7 @@ class TranslatorCubit extends Cubit<TranslatorState> {
         ),
       );
       if (!_aiNotice.seen) unawaited(_aiNotice.markSeen());
+      unawaited(_remember(result));
     } catch (error) {
       if (isClosed || request != _request) return;
       emit(
@@ -261,6 +309,9 @@ class TranslatorCubit extends Cubit<TranslatorState> {
     switch (state.failure) {
       case TranslatorFailure.permissionPermanentlyDenied:
         await _recorder.openSettings();
+      case TranslatorFailure.importFailed || TranslatorFailure.unsupportedFile:
+        emit(state.copyWith(clearFailure: true));
+        await importAudio();
       case TranslatorFailure.languagesFailed:
         await loadLanguages();
       case TranslatorFailure.network ||
@@ -359,6 +410,42 @@ class TranslatorCubit extends Cubit<TranslatorState> {
   void _onPlaying(bool playing) {
     if (isClosed || playing == state.isPlaying) return;
     emit(state.copyWith(isPlaying: playing));
+  }
+
+  Future<TranslatorFailure?> _validateImport(String path) async {
+    if (!AudioLimits.isImportable(path)) {
+      return TranslatorFailure.unsupportedFile;
+    }
+    final size = await _recorder.fileSize(path);
+    if (size == 0) return TranslatorFailure.importFailed;
+    if (size < AudioLimits.minFileBytes) {
+      return TranslatorFailure.recordingTooShort;
+    }
+    if (size > AudioLimits.maxFileBytes) {
+      return TranslatorFailure.recordingTooLarge;
+    }
+    return null;
+  }
+
+  Future<Duration> _probe(String path) async {
+    try {
+      return await _player.probeDuration(path) ?? Duration.zero;
+    } catch (_) {
+      return Duration.zero;
+    }
+  }
+
+  Future<void> _remember(TranslationResult result) async {
+    final code = result.sourceLanguageCode;
+    final source = state.languages.where((language) => language.code == code);
+    try {
+      await _saveToHistory(
+        result,
+        source.isEmpty ? (code ?? '').toUpperCase() : source.first.displayName,
+      );
+    } catch (_) {
+      return;
+    }
   }
 
   Future<TranslatorFailure?> _validate(String? path, Duration elapsed) async {

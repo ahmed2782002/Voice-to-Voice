@@ -1,9 +1,13 @@
+typedef CreateAudioPlayer = AudioPlayerService Function();
+
 abstract interface class AudioPlayerService {
   Stream<Duration> get positionChanges;
 
   Stream<bool> get playingChanges;
 
   Future<Duration?> open(String path);
+
+  Future<Duration?> probeDuration(String path);
 
   Future<void> play();
 

@@ -59,5 +59,22 @@
   "theme_light": "Light",
   "language_arabic": "العربية",
   "language_english": "English",
-  "splash_tagline": "Speak once. Be understood everywhere."
+  "splash_tagline": "Speak once. Be understood everywhere.",
+  "ai_voice_label": "AI-generated voice",
+  "import_audio": "Import audio file",
+  "imported_audio": "Imported audio file",
+  "import_hint": "Or import an audio file (mp3, m4a, wav, ogg, webm, flac) up to 5 MB",
+  "error_import_failed": "The audio file could not be opened. Choose another file.",
+  "error_unsupported_file": "This file type is not supported. Use mp3, m4a, wav, ogg, webm or flac.",
+  "choose_another_file": "Choose another file",
+  "history": "Translation history",
+  "history_empty": "No saved translations yet.",
+  "history_local_notice": "Saved only on this device. You can delete them at any time.",
+  "history_load_failed": "Saved translations could not be loaded.",
+  "history_language_pair": "{} to {}",
+  "delete_entry": "Delete translation",
+  "clear_history": "Delete all",
+  "clear_history_confirm": "Delete all saved translations? This cannot be undone.",
+  "cancel": "Cancel",
+  "back": "Back"
 }

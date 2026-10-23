@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_to_voice/core/services/audio/audio_recorder_service.dart';
+import 'package:voice_to_voice/feature/history/data/model/translation_history_entry.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translation_result.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translator_api_exception.dart';
 import 'package:voice_to_voice/feature/translator/presentation/view/widgets/translator_header.dart';
@@ -34,6 +35,8 @@ void main() {
   late FakeClock clock;
   late FakeLanguageLoader languages;
   late FakeAiNoticeStore aiNotice;
+  late FakeAudioFilePicker picker;
+  late FakeHistoryStore history;
 
   setUp(() {
     recorder = FakeAudioRecorderService();
@@ -42,6 +45,8 @@ void main() {
     clock = FakeClock();
     languages = FakeLanguageLoader();
     aiNotice = FakeAiNoticeStore();
+    picker = FakeAudioFilePicker();
+    history = FakeHistoryStore();
   });
 
   TranslatorCubit buildCubit() => TranslatorCubit(
@@ -49,6 +54,8 @@ void main() {
     player: player,
     translate: translator.call,
     loadLanguages: languages.call,
+    picker: picker,
+    saveToHistory: history.save,
     aiNotice: aiNotice,
     clock: clock.call,
   )..loadLanguages();
@@ -442,6 +449,121 @@ void main() {
         expect(theme.state, ThemeMode.light);
         final context = tester.element(find.byType(TranslatorHeader));
         expect(Theme.of(context).brightness, Brightness.light);
+      });
+    });
+
+    group('import and disclosure', () {
+      testWidgets('shows an imported file as the source audio', (tester) async {
+        await tester.pumpTranslator(buildCubit());
+
+        await tapKey(tester, const Key('translator_importButton'));
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('Imported audio file'), findsOneWidget);
+        expect(picker.calls, 1);
+      });
+
+      testWidgets('explains an unsupported file and offers another pick', (
+        tester,
+      ) async {
+        picker.pickedPath = '/tmp/notes.txt';
+        await tester.pumpTranslator(buildCubit());
+
+        await tapKey(tester, const Key('translator_importButton'));
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.textContaining('file type is not supported'), findsOne);
+        expect(find.text('Choose another file'), findsOneWidget);
+      });
+
+      testWidgets('keeps an AI-generated voice label on every result', (
+        tester,
+      ) async {
+        aiNotice.seen = true;
+        await tester.pumpTranslator(buildCubit());
+        await recordVoice(tester);
+
+        await tapTranslate(tester);
+
+        expect(find.textContaining('AI-generated translation'), findsNothing);
+        expect(
+          find.byKey(const Key('translator_aiVoiceBadge')),
+          findsOneWidget,
+        );
+        expect(find.text('AI-generated voice'), findsOneWidget);
+      });
+    });
+
+    group('history', () {
+      testWidgets('opens saved translations from the menu and deletes one', (
+        tester,
+      ) async {
+        final store = FakeHistoryStore()
+          ..entries.add(
+            TranslationHistoryEntry(
+              id: '1',
+              createdAt: DateTime(2026, 10, 23, 9),
+              sourceName: 'Arabic',
+              targetName: 'English',
+              originalText: 'مرحبا',
+              translatedText: 'Hello there',
+              audioPath: '/tmp/history_1.mp3',
+            ),
+          );
+        await tester.pumpTranslator(buildCubit(), historyStore: store);
+
+        await tester.tap(find.byKey(const Key('translator_menuButton')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('translator_menu_history')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('history_screen')), findsOneWidget);
+        expect(find.text('Hello there'), findsOneWidget);
+        expect(find.text('Arabic to English'), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('history_delete_1')));
+        await tester.pumpAndSettle();
+
+        expect(store.deleted, ['1']);
+        expect(find.byKey(const Key('history_empty')), findsOneWidget);
+      });
+
+      testWidgets('asks before deleting all saved translations', (
+        tester,
+      ) async {
+        final store = FakeHistoryStore()
+          ..entries.add(
+            TranslationHistoryEntry(
+              id: '1',
+              createdAt: DateTime(2026, 10, 23, 9),
+              sourceName: 'Arabic',
+              targetName: 'English',
+              originalText: '',
+              translatedText: 'Hello there',
+              audioPath: '/tmp/history_1.mp3',
+            ),
+          );
+        await tester.pumpTranslator(buildCubit(), historyStore: store);
+        await tester.tap(find.byKey(const Key('translator_menuButton')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('translator_menu_history')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('history_clear')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('confirm_cancel')));
+        await tester.pumpAndSettle();
+        expect(store.clearCalls, 0);
+
+        await tester.tap(find.byKey(const Key('history_clear')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('confirm_accept')));
+        await tester.pumpAndSettle();
+
+        expect(store.clearCalls, 1);
+        expect(find.byKey(const Key('history_empty')), findsOneWidget);
       });
     });
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../../../core/utils/constants/app_text.dart';
+import '../../../../../core/utils/format/content_direction.dart';
 
 class TranscriptSection extends StatelessWidget {
   const TranscriptSection({
@@ -24,7 +25,11 @@ class TranscriptSection extends StatelessWidget {
         children: [
           Text(label, style: context.text.caption.copyWith(color: color)),
           SizedBox(height: 4.h),
-          SelectableText(text, style: context.text.body),
+          SelectableText(
+            text,
+            style: context.text.body,
+            textDirection: ContentDirection.of(text),
+          ),
         ],
       ),
     );

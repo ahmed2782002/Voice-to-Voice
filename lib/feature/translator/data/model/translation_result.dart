@@ -9,6 +9,11 @@ typedef TranslateVoice = Future<TranslationResult> Function({
 
 typedef LoadLanguages = Future<List<TranslationLanguage>> Function();
 
+typedef SaveTranslation = Future<void> Function(
+  TranslationResult result,
+  String sourceName,
+);
+
 class TranslationResult extends Equatable {
   const TranslationResult({
     required this.audioPath,

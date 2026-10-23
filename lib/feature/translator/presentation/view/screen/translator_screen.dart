@@ -9,6 +9,7 @@ import '../../view_model/translator_cubit.dart';
 import '../../view_model/translator_state.dart';
 import '../widgets/ai_notice_banner.dart';
 import '../widgets/language_picker_sheet.dart';
+import '../widgets/import_audio_button.dart';
 import '../widgets/language_selector_field.dart';
 import '../widgets/record_button.dart';
 import '../widgets/source_audio_card.dart';
@@ -120,10 +121,23 @@ class TranslatorScreen extends StatelessWidget {
                   ),
                   Padding(
                     padding: EdgeInsetsDirectional.only(top: 8.h, bottom: 20.h),
-                    child: RecordButton(
-                      isRecording: state.isRecording,
-                      level: state.currentLevel,
-                      onPressed: state.canRecord ? cubit.toggleRecording : null,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(width: 56.r),
+                        SizedBox(width: 20.w),
+                        RecordButton(
+                          isRecording: state.isRecording,
+                          level: state.currentLevel,
+                          onPressed: state.canRecord
+                              ? cubit.toggleRecording
+                              : null,
+                        ),
+                        SizedBox(width: 20.w),
+                        ImportAudioButton(
+                          onPressed: state.canImport ? cubit.importAudio : null,
+                        ),
+                      ],
                     ),
                   ),
                 ],

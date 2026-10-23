@@ -59,5 +59,22 @@
   "theme_light": "فاتح",
   "language_arabic": "العربية",
   "language_english": "English",
-  "splash_tagline": "تكلّم بلغتك، ويفهمك العالم."
+  "splash_tagline": "تكلّم بلغتك، ويفهمك العالم.",
+  "ai_voice_label": "صوت مولّد بالذكاء الاصطناعي",
+  "import_audio": "استيراد ملف صوتي",
+  "imported_audio": "ملف صوتي مستورد",
+  "import_hint": "أو استورد ملفًا صوتيًا (mp3, m4a, wav, ogg, webm, flac) حتى ٥ ميجابايت",
+  "error_import_failed": "تعذر فتح الملف الصوتي. اختر ملفًا آخر.",
+  "error_unsupported_file": "نوع الملف غير مدعوم. استخدم mp3 أو m4a أو wav أو ogg أو webm أو flac.",
+  "choose_another_file": "اختر ملفًا آخر",
+  "history": "سجل الترجمات",
+  "history_empty": "لا توجد ترجمات محفوظة بعد.",
+  "history_local_notice": "محفوظة على هذا الجهاز فقط، ويمكنك حذفها في أي وقت.",
+  "history_load_failed": "تعذر تحميل الترجمات المحفوظة.",
+  "history_language_pair": "من {} إلى {}",
+  "delete_entry": "حذف الترجمة",
+  "clear_history": "حذف الكل",
+  "clear_history_confirm": "حذف كل الترجمات المحفوظة؟ لا يمكن التراجع عن ذلك.",
+  "cancel": "إلغاء",
+  "back": "رجوع"
 }

@@ -1,1 +1,1 @@
-enum TranslatorMenuAction { language, theme }
+enum TranslatorMenuAction { history, language, theme }

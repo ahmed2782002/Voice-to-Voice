@@ -20,6 +20,8 @@ void main() {
   late FakeClock clock;
   late FakeLanguageLoader languages;
   late FakeAiNoticeStore aiNotice;
+  late FakeAudioFilePicker picker;
+  late FakeHistoryStore history;
   late TranslatorCubit cubit;
 
   setUp(() {
@@ -29,11 +31,15 @@ void main() {
     clock = FakeClock();
     languages = FakeLanguageLoader();
     aiNotice = FakeAiNoticeStore();
+    picker = FakeAudioFilePicker();
+    history = FakeHistoryStore();
     cubit = TranslatorCubit(
       recorder: recorder,
       player: player,
       translate: translator.call,
       loadLanguages: languages.call,
+      picker: picker,
+      saveToHistory: history.save,
       aiNotice: aiNotice,
       clock: clock.call,
     );
@@ -124,6 +130,94 @@ void main() {
 
         expect(cubit.state.failure, TranslatorFailure.recordingFailed);
         expect(cubit.state.isRecording, isFalse);
+      });
+    });
+
+    group('import', () {
+      test('uses an imported file as the source audio', () async {
+        await record();
+
+        await cubit.importAudio();
+
+        expect(cubit.state.hasSource, isTrue);
+        expect(cubit.state.sourceIsImported, isTrue);
+        expect(cubit.state.sourcePath, '/tmp/source_import.mp3');
+        expect(cubit.state.sourceDuration, const Duration(seconds: 4));
+        expect(recorder.deletedPaths, contains('/tmp/source.m4a'));
+      });
+
+      test('ignores a cancelled picker', () async {
+        picker.pickedPath = null;
+
+        await cubit.importAudio();
+
+        expect(cubit.state.hasSource, isFalse);
+        expect(cubit.state.failure, isNull);
+      });
+
+      test('rejects an unsupported file type and deletes the copy', () async {
+        picker.pickedPath = '/tmp/notes.txt';
+
+        await cubit.importAudio();
+
+        expect(cubit.state.failure, TranslatorFailure.unsupportedFile);
+        expect(cubit.state.hasSource, isFalse);
+        expect(recorder.deletedPaths, ['/tmp/notes.txt']);
+      });
+
+      test('rejects a file over the size limit', () async {
+        recorder.recordedBytes = 5 * 1024 * 1024 + 1;
+
+        await cubit.importAudio();
+
+        expect(cubit.state.failure, TranslatorFailure.recordingTooLarge);
+        expect(cubit.state.hasSource, isFalse);
+      });
+
+      test('reports a picker failure and retries with the picker', () async {
+        picker.error = Exception('picker crashed');
+        await cubit.importAudio();
+        expect(cubit.state.failure, TranslatorFailure.importFailed);
+
+        picker.error = null;
+        await cubit.retry();
+
+        expect(picker.calls, 2);
+        expect(cubit.state.sourceIsImported, isTrue);
+        expect(cubit.state.failure, isNull);
+      });
+
+      test('translates an imported file like a recording', () async {
+        await cubit.importAudio();
+
+        await cubit.translate();
+
+        expect(cubit.state.isReady, isTrue);
+        expect(translator.calls, 1);
+      });
+    });
+
+    group('history', () {
+      test('saves a successful translation with the source name', () async {
+        await cubit.loadLanguages();
+        await record();
+        translator.sourceLanguageCode = 'en';
+
+        await cubit.translate();
+        await flush();
+
+        expect(history.saved, hasLength(1));
+        expect(history.saved.single.$2, 'English');
+      });
+
+      test('does not save a failed translation', () async {
+        await record();
+        translator.error = const SocketException('offline');
+
+        await cubit.translate();
+        await flush();
+
+        expect(history.saved, isEmpty);
       });
     });
 
@@ -283,6 +377,8 @@ void main() {
           player: FakeAudioPlayerService(),
           translate: translator.call,
           loadLanguages: languages.call,
+          picker: picker,
+          saveToHistory: history.save,
           aiNotice: FakeAiNoticeStore(seen: true),
         );
         addTearDown(seenCubit.close);

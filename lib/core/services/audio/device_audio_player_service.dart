@@ -20,6 +20,16 @@ class DeviceAudioPlayerService implements AudioPlayerService {
   Future<Duration?> open(String path) => _player.setFilePath(path);
 
   @override
+  Future<Duration?> probeDuration(String path) async {
+    final probe = AudioPlayer();
+    try {
+      return await probe.setFilePath(path);
+    } finally {
+      await probe.dispose();
+    }
+  }
+
+  @override
   Future<void> play() async {
     if (_player.processingState == ProcessingState.completed) {
       await _player.seek(Duration.zero);

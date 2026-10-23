@@ -50,6 +50,9 @@ class TranslatorRepo {
   }) async {
     final bytes = await File(sourcePath).readAsBytes();
     _validateSize(bytes.length);
+    final extension = AudioLimits.isImportable(sourcePath)
+        ? AudioLimits.extensionOf(sourcePath)
+        : 'm4a';
     final response = await _send(
       () => http.MultipartRequest('POST', _endpoint('translate-voice'))
         ..fields['targetLanguage'] = language.code
@@ -57,8 +60,8 @@ class TranslatorRepo {
           http.MultipartFile.fromBytes(
             'audio',
             bytes,
-            filename: 'recording.m4a',
-            contentType: MediaType('audio', 'mp4'),
+            filename: 'recording.$extension',
+            contentType: _uploadType(extension),
           ),
         ),
       AudioLimits.translationTimeout,
@@ -181,6 +184,15 @@ class TranslatorRepo {
     await file.writeAsBytes(bytes, flush: true);
     return file.path;
   }
+
+  MediaType _uploadType(String extension) => switch (extension) {
+    'mp3' || 'mpeg' || 'mpga' => MediaType('audio', 'mpeg'),
+    'wav' => MediaType('audio', 'wav'),
+    'webm' => MediaType('audio', 'webm'),
+    'ogg' || 'opus' => MediaType('audio', 'ogg'),
+    'flac' => MediaType('audio', 'flac'),
+    _ => MediaType('audio', 'mp4'),
+  };
 
   String _extension(String mimeType) => switch (mimeType.toLowerCase()) {
     'audio/wav' || 'audio/x-wav' || 'audio/wave' => 'wav',

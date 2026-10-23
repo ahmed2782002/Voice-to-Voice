@@ -63,7 +63,7 @@ class SourceAudioCard extends StatelessWidget {
             AudioWaveform(
               levels: state.isRecording
                   ? state.recordingBars
-                  : state.sourceLevels,
+                  : state.sourceBars,
               progress: state.isRecording ? 1 : state.progressOf(track),
               activeColor: state.isRecording
                   ? context.colors.recording
@@ -77,7 +77,9 @@ class SourceAudioCard extends StatelessWidget {
             SizedBox(height: 8.h),
             PlaybackControls(
               keyPrefix: 'translator_source',
-              title: AppStrings.originalVoice.tr(),
+              title: state.sourceIsImported
+                  ? AppStrings.importedAudio.tr()
+                  : AppStrings.originalVoice.tr(),
               isPlaying: state.isPlayingTrack(track),
               progressLabel: DurationFormat.progress(
                 state.positionOf(track),
@@ -108,6 +110,7 @@ class SourceAudioCard extends StatelessWidget {
               style: context.text.caption,
             ),
             Text(AppStrings.anyLanguageHint.tr(), style: context.text.caption),
+            Text(AppStrings.importHint.tr(), style: context.text.caption),
           ],
         ],
       ),
