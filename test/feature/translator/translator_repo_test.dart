@@ -2,47 +2,44 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:voice_to_voice/core/config/supabase_config.dart';
+import 'package:voice_to_voice/core/network/dio_client.dart';
+import 'package:voice_to_voice/core/services/audio/audio_file_store.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translation_language.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translator_api_exception.dart';
 import 'package:voice_to_voice/feature/translator/data/repo/translator_repo.dart';
 
+import '../../helpers/fake_http_adapter.dart';
 import '../../helpers/fakes.dart';
 
 void main() {
   late Directory directory;
   late FakeAccessTokenProvider session;
-  late List<http.Request> requests;
+  late FakeHttpAdapter adapter;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('translator_repo_test');
     session = FakeAccessTokenProvider();
-    requests = [];
   });
 
   tearDown(() async {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  TranslatorRepo buildRepo(List<http.Response> responses) {
-    final queue = [...responses];
+  TranslatorRepo buildRepo(List<Object> replies) {
+    adapter = FakeHttpAdapter(replies);
     return TranslatorRepo(
-      client: MockClient((request) async {
-        requests.add(request);
-        return queue.removeAt(0);
-      }),
-      session: session,
-      outputDirectory: () async => directory,
+      client: DioClient(
+        tokens: session,
+        headers: const {'apikey': SupabaseConfig.publishableKey},
+        adapter: adapter,
+        retryDelays: const [],
+      ),
+      audioStore: AudioFileStore(directory: () async => directory),
     );
   }
 
-  http.Response json(Object body, int status) => http.Response(
-    jsonEncode(body),
-    status,
-    headers: {'content-type': 'application/json; charset=utf-8'},
-  );
+  Object json(Object body, int status) => FakeHttpAdapter.json(body, status);
 
   Future<String> sourceFile(int bytes) async {
     final file = File('${directory.path}/source.m4a');
@@ -130,11 +127,11 @@ void main() {
 
         await repo.fetchLanguages();
 
-        final headers = requests.single.headers;
+        final headers = adapter.requests.single.options.headers;
         expect(headers['Authorization'], 'Bearer user-jwt-0');
         expect(headers['apikey'], SupabaseConfig.publishableKey);
         expect(
-          requests.single.url.toString(),
+          adapter.requests.single.options.uri.toString(),
           '${SupabaseConfig.functionsUrl}/languages',
         );
       });
@@ -152,7 +149,10 @@ void main() {
         await repo.fetchLanguages();
 
         expect(session.requests, [false, true]);
-        expect(requests.last.headers['Authorization'], 'Bearer user-jwt-1');
+        expect(
+          adapter.requests.last.options.headers['Authorization'],
+          'Bearer user-jwt-1',
+        );
       });
 
       test('throws a FormatException for an unexpected body', () async {
@@ -185,10 +185,10 @@ void main() {
           language: const TranslationLanguage(code: 'en', name: 'English'),
         );
 
-        final request = requests.single;
-        expect(request.method, 'POST');
-        expect(request.url.path, endsWith('/translate-voice'));
-        expect(request.headers['content-type'], startsWith('multipart/'));
+        final request = adapter.requests.single;
+        expect(request.options.method, 'POST');
+        expect(request.options.uri.path, endsWith('/translate-voice'));
+        expect(request.options.contentType, startsWith('multipart/'));
         expect(request.body, contains('name="targetLanguage"'));
         expect(
           request.body,
@@ -222,7 +222,7 @@ void main() {
             language: TranslationLanguage.arabic,
           );
 
-          final body = requests.single.body;
+          final body = adapter.requests.single.body;
           expect(body, contains('filename="recording.ogg"'));
           expect(body, contains('content-type: audio/ogg'));
         },
@@ -247,7 +247,7 @@ void main() {
               ),
             ),
           );
-          expect(requests, isEmpty);
+          expect(adapter.requests, isEmpty);
         },
       );
 
@@ -282,7 +282,7 @@ void main() {
         () async {
           final repo = buildRepo([
             json({'code': 'NO_SPEECH', 'message': 'Nothing heard'}, 422),
-            http.Response('gateway down', 504),
+            FakeHttpAdapter.text('gateway down', 504),
           ]);
           final path = await sourceFile(4096);
 

@@ -62,6 +62,8 @@ abstract final class AppStrings {
   static const String themeLight = 'theme_light';
   static const String languageArabic = 'language_arabic';
   static const String languageEnglish = 'language_english';
+  static const String noInternetTitle = 'no_internet_title';
+  static const String noInternetHint = 'no_internet_hint';
   static const String splashTagline = 'splash_tagline';
   static const String aiVoiceLabel = 'ai_voice_label';
   static const String importAudio = 'import_audio';

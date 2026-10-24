@@ -1,43 +1,30 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:dio/dio.dart';
 
-import '../../../../core/config/supabase_config.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../../core/network/endpoints.dart';
+import '../../../../core/network/network_exception.dart';
+import '../../../../core/services/audio/audio_file_store.dart';
+import '../../../../core/services/audio/audio_format.dart';
 import '../../../../core/services/audio/audio_limits.dart';
-import '../../../../core/services/auth/access_token_provider.dart';
 import '../model/translation_language.dart';
 import '../model/translation_result.dart';
 import '../model/translator_api_exception.dart';
 
 class TranslatorRepo {
-  TranslatorRepo({
-    required this._client,
-    required this._session,
-    Future<Directory> Function()? outputDirectory,
-    this._baseUrl = SupabaseConfig.functionsUrl,
-  }) : _outputDirectory = outputDirectory ?? getTemporaryDirectory;
+  TranslatorRepo({required this._client, AudioFileStore? audioStore})
+    : _audioStore = audioStore ?? AudioFileStore();
 
-  final http.Client _client;
-  final AccessTokenProvider _session;
-  final Future<Directory> Function() _outputDirectory;
-  final String _baseUrl;
-  static bool _languagesLogged = false;
+  final DioClient _client;
+  final AudioFileStore _audioStore;
 
   Future<List<TranslationLanguage>> fetchLanguages() async {
-    final response = await _send(
-      () => http.Request('GET', _endpoint('languages')),
-      SupabaseConfig.languagesTimeout,
-    );
-    _logLanguagesOnce(response.body);
-    final languages = TranslationLanguage.listFromJson(
-      jsonDecode(response.body),
-    ).where((language) => language.output).toList();
+    final json = await _guard(() => _client.get(Endpoints.languages));
+    final languages = TranslationLanguage.listFromJson(json)
+        .where((language) => language.output)
+        .toList();
     if (languages.isEmpty) {
       throw const FormatException('No target languages returned');
     }
@@ -50,26 +37,22 @@ class TranslatorRepo {
   }) async {
     final bytes = await File(sourcePath).readAsBytes();
     _validateSize(bytes.length);
-    final extension = AudioLimits.isImportable(sourcePath)
-        ? AudioLimits.extensionOf(sourcePath)
-        : 'm4a';
-    final response = await _send(
-      () => http.MultipartRequest('POST', _endpoint('translate-voice'))
-        ..fields['targetLanguage'] = language.code
-        ..files.add(
-          http.MultipartFile.fromBytes(
-            'audio',
+    final extension = AudioFormat.uploadExtension(sourcePath);
+    final json = await _guard(
+      () => _client.upload(
+        Endpoints.translateVoice,
+        FormData.fromMap({
+          'targetLanguage': language.code,
+          'audio': MultipartFile.fromBytes(
             bytes,
             filename: 'recording.$extension',
-            contentType: _uploadType(extension),
+            contentType: DioMediaType.parse(AudioFormat.mimeTypeOf(extension)),
           ),
-        ),
-      AudioLimits.translationTimeout,
+        }),
+      ),
     );
-    return _toResult(jsonDecode(response.body), language);
+    return _toResult(json, language);
   }
-
-  Uri _endpoint(String path) => Uri.parse('$_baseUrl/$path');
 
   void _validateSize(int length) {
     if (length < AudioLimits.minFileBytes) {
@@ -86,56 +69,15 @@ class TranslatorRepo {
     }
   }
 
-  Future<http.Response> _send(
-    http.BaseRequest Function() build,
-    Duration timeout,
-  ) async {
-    var response = await _attempt(build(), await _token(), timeout);
-    if (response.statusCode == HttpStatus.unauthorized) {
-      response = await _attempt(
-        build(),
-        await _token(forceRefresh: true),
-        timeout,
-      );
-    }
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return response;
-    }
-    throw TranslatorApiException.fromResponse(
-      response.statusCode,
-      response.body,
-    );
-  }
-
-  Future<http.Response> _attempt(
-    http.BaseRequest request,
-    String token,
-    Duration timeout,
-  ) async {
-    request.headers.addAll({
-      'Authorization': 'Bearer $token',
-      'apikey': SupabaseConfig.publishableKey,
-      'Accept': 'application/json',
-    });
+  Future<Object?> _guard(Future<Object?> Function() request) async {
     try {
-      return await _client
-          .send(request)
-          .then(http.Response.fromStream)
-          .timeout(timeout);
-    } on http.ClientException catch (error) {
-      throw SocketException(error.message);
-    }
-  }
-
-  Future<String> _token({bool forceRefresh = false}) async {
-    try {
-      return await _session.accessToken(forceRefresh: forceRefresh);
-    } on AuthRetryableFetchException catch (error) {
-      throw SocketException(error.message);
-    } on AuthException catch (error) {
+      return await request();
+    } on HttpStatusException catch (error) {
+      throw TranslatorApiException.fromResponse(error.statusCode, error.body);
+    } on SessionException catch (error) {
       throw TranslatorApiException(
         code: TranslatorErrorCode.unauthorized,
-        statusCode: int.tryParse(error.statusCode ?? '') ?? 401,
+        statusCode: error.statusCode,
         message: error.message,
         retryable: true,
       );
@@ -160,7 +102,11 @@ class TranslatorRepo {
     final mimeType = audio['mimeType'] is String
         ? audio['mimeType'] as String
         : 'audio/mpeg';
-    final path = await _writeAudio(bytes, language.code, mimeType);
+    final path = await _audioStore.save(
+      bytes,
+      prefix: 'translated_${language.code}',
+      mimeType: mimeType,
+    );
     return TranslationResult(
       audioPath: path,
       language: language,
@@ -169,42 +115,5 @@ class TranslatorRepo {
       translatedText: (json['translatedText'] as String?)?.trim() ?? '',
       aiGenerated: json['aiGenerated'] as bool? ?? true,
     );
-  }
-
-  Future<String> _writeAudio(
-    Uint8List bytes,
-    String languageCode,
-    String mimeType,
-  ) async {
-    final directory = await _outputDirectory();
-    final stamp = DateTime.now().millisecondsSinceEpoch;
-    final file = File(
-      '${directory.path}/translated_${languageCode}_$stamp.${_extension(mimeType)}',
-    );
-    await file.writeAsBytes(bytes, flush: true);
-    return file.path;
-  }
-
-  MediaType _uploadType(String extension) => switch (extension) {
-    'mp3' || 'mpeg' || 'mpga' => MediaType('audio', 'mpeg'),
-    'wav' => MediaType('audio', 'wav'),
-    'webm' => MediaType('audio', 'webm'),
-    'ogg' || 'opus' => MediaType('audio', 'ogg'),
-    'flac' => MediaType('audio', 'flac'),
-    _ => MediaType('audio', 'mp4'),
-  };
-
-  String _extension(String mimeType) => switch (mimeType.toLowerCase()) {
-    'audio/wav' || 'audio/x-wav' || 'audio/wave' => 'wav',
-    'audio/ogg' || 'audio/opus' => 'ogg',
-    'audio/aac' => 'aac',
-    'audio/mp4' || 'audio/m4a' || 'audio/x-m4a' => 'm4a',
-    _ => 'mp3',
-  };
-
-  void _logLanguagesOnce(String body) {
-    if (_languagesLogged || !kDebugMode) return;
-    _languagesLogged = true;
-    debugPrint('GET /languages raw response: $body');
   }
 }

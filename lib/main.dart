@@ -3,16 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/supabase_config.dart';
+import 'core/network/dio_client.dart';
 import 'core/services/audio/audio_player_service.dart';
 import 'core/services/audio/device_audio_file_picker.dart';
 import 'core/services/audio/device_audio_player_service.dart';
 import 'core/services/audio/device_audio_recorder_service.dart';
 import 'core/services/auth/supabase_session_service.dart';
+import 'core/services/connectivity/device_connectivity_service.dart';
 import 'core/services/preferences/preferences_ai_notice_store.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_cubit.dart';
@@ -33,9 +34,12 @@ Future<void> main() async {
     publishableKey: SupabaseConfig.publishableKey,
   );
   final repo = TranslatorRepo(
-    client: http.Client(),
-    session: SupabaseSessionService(Supabase.instance.client.auth),
+    client: DioClient(
+      tokens: SupabaseSessionService(Supabase.instance.client.auth),
+      headers: const {'apikey': SupabaseConfig.publishableKey},
+    ),
   );
+  final history = FileTranslationHistoryStore();
   runApp(
     EasyLocalization(
       supportedLocales: const [Locale('en'), Locale('ar')],
@@ -43,7 +47,21 @@ Future<void> main() async {
       startLocale: const Locale('ar'),
       path: 'assets/translations',
       useOnlyLangCode: true,
-      child: VoxBridgeApp(repo: repo, preferences: preferences),
+      child: VoxBridgeApp(
+        preferences: preferences,
+        history: history,
+        createPlayer: DeviceAudioPlayerService.new,
+        createTranslatorCubit: () => TranslatorCubit(
+          recorder: DeviceAudioRecorderService(),
+          player: DeviceAudioPlayerService(),
+          translate: repo.translateVoice,
+          loadLanguages: repo.fetchLanguages,
+          picker: DeviceAudioFilePicker(),
+          saveToHistory: history.save,
+          connectivity: DeviceConnectivityService(),
+          aiNotice: PreferencesAiNoticeStore(preferences),
+        ),
+      ),
     ),
   );
   FlutterNativeSplash.remove();
@@ -52,37 +70,28 @@ Future<void> main() async {
 class VoxBridgeApp extends StatelessWidget {
   const VoxBridgeApp({
     super.key,
-    required this.repo,
     required this.preferences,
+    required this.history,
+    required this.createPlayer,
+    required this.createTranslatorCubit,
   });
 
-  final TranslatorRepo repo;
   final SharedPreferences preferences;
+  final TranslationHistoryStore history;
+  final CreateAudioPlayer createPlayer;
+  final TranslatorCubit Function() createTranslatorCubit;
 
   @override
   Widget build(BuildContext context) {
-    final history = FileTranslationHistoryStore();
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider<TranslationHistoryStore>.value(value: history),
-        RepositoryProvider<CreateAudioPlayer>.value(
-          value: DeviceAudioPlayerService.new,
-        ),
+        RepositoryProvider<CreateAudioPlayer>.value(value: createPlayer),
       ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider(create: (_) => ThemeCubit(preferences)),
-          BlocProvider(
-            create: (_) => TranslatorCubit(
-              recorder: DeviceAudioRecorderService(),
-              player: DeviceAudioPlayerService(),
-              translate: repo.translateVoice,
-              loadLanguages: repo.fetchLanguages,
-              picker: DeviceAudioFilePicker(),
-              saveToHistory: history.save,
-              aiNotice: PreferencesAiNoticeStore(preferences),
-            )..loadLanguages(),
-          ),
+          BlocProvider(create: (_) => createTranslatorCubit()..loadLanguages()),
         ],
         child: ScreenUtilInit(
           designSize: const Size(390, 844),

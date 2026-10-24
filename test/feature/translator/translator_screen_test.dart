@@ -1,8 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_to_voice/core/network/network_exception.dart';
+import 'package:voice_to_voice/core/utils/constants/app_flags.dart';
+import 'package:voice_to_voice/core/utils/constants/app_icons.dart';
+import 'package:voice_to_voice/core/widgets/no_connection/no_connection_view.dart';
+import 'package:voice_to_voice/core/widgets/settings_sheet/theme_preview.dart';
 import 'package:voice_to_voice/core/services/audio/audio_recorder_service.dart';
 import 'package:voice_to_voice/feature/history/data/model/translation_history_entry.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translation_result.dart';
@@ -37,6 +41,7 @@ void main() {
   late FakeAiNoticeStore aiNotice;
   late FakeAudioFilePicker picker;
   late FakeHistoryStore history;
+  late FakeConnectivityService connectivity;
 
   setUp(() {
     recorder = FakeAudioRecorderService();
@@ -47,6 +52,7 @@ void main() {
     aiNotice = FakeAiNoticeStore();
     picker = FakeAudioFilePicker();
     history = FakeHistoryStore();
+    connectivity = FakeConnectivityService();
   });
 
   TranslatorCubit buildCubit() => TranslatorCubit(
@@ -56,6 +62,7 @@ void main() {
     loadLanguages: languages.call,
     picker: picker,
     saveToHistory: history.save,
+    connectivity: connectivity,
     aiNotice: aiNotice,
     clock: clock.call,
   )..loadLanguages();
@@ -248,7 +255,7 @@ void main() {
       testWidgets('shows a network error with retry and no result', (
         tester,
       ) async {
-        translator.error = const SocketException('offline');
+        translator.error = const NoConnectionException('offline');
         await tester.pumpTranslator(buildCubit());
         await recordVoice(tester);
 
@@ -450,6 +457,81 @@ void main() {
         final context = tester.element(find.byType(TranslatorHeader));
         expect(Theme.of(context).brightness, Brightness.light);
       });
+
+      testWidgets('shows a flag on each app language card', (tester) async {
+        await tester.pumpTranslator(buildCubit());
+
+        await openMenuItem(tester, 'language');
+
+        expect(find.text(AppFlags.arabic), findsOneWidget);
+        expect(find.text(AppFlags.english), findsOneWidget);
+      });
+
+      testWidgets('shows a dark and a light preview on the theme cards', (
+        tester,
+      ) async {
+        await tester.pumpTranslator(buildCubit());
+
+        await openMenuItem(tester, 'theme');
+
+        expect(find.byType(ThemePreview), findsNWidgets(2));
+        expect(find.byIcon(AppIcons.darkMode), findsOneWidget);
+        expect(find.byIcon(AppIcons.lightMode), findsOneWidget);
+      });
+    });
+
+    group('connectivity', () {
+      testWidgets('replaces the whole page while there is no network', (
+        tester,
+      ) async {
+        connectivity.online = false;
+        await tester.pumpTranslator(buildCubit());
+        await tester.pumpAndSettle();
+
+        expect(find.byType(NoConnectionView), findsOneWidget);
+        expect(find.text("You're offline"), findsOneWidget);
+        expect(find.byKey(TranslatorKeys.record), findsNothing);
+        expect(find.byKey(TranslatorKeys.translate), findsNothing);
+        expect(find.byType(TranslatorHeader), findsOneWidget);
+      });
+
+      testWidgets('brings the page back when the network returns', (
+        tester,
+      ) async {
+        connectivity.online = false;
+        await tester.pumpTranslator(buildCubit());
+        await tester.pumpAndSettle();
+
+        connectivity.emit(true);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(NoConnectionView), findsNothing);
+        expect(find.byKey(TranslatorKeys.record), findsOneWidget);
+      });
+
+      testWidgets('checks the network again from the retry button', (
+        tester,
+      ) async {
+        connectivity.online = false;
+        await tester.pumpTranslator(buildCubit());
+        await tester.pumpAndSettle();
+
+        connectivity.online = true;
+        await tester.tap(find.byKey(const Key('noConnection_retry')));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(NoConnectionView), findsNothing);
+      });
+
+      testWidgets('shows the normal page when the device is online', (
+        tester,
+      ) async {
+        await tester.pumpTranslator(buildCubit());
+        await tester.pumpAndSettle();
+
+        expect(find.byType(NoConnectionView), findsNothing);
+        expect(find.byKey(TranslatorKeys.record), findsOneWidget);
+      });
     });
 
     group('import and disclosure', () {
@@ -597,7 +679,7 @@ void main() {
       testWidgets('reloads languages from the selector after a failure', (
         tester,
       ) async {
-        languages.error = const SocketException('offline');
+        languages.error = const NoConnectionException('offline');
         await tester.pumpTranslator(buildCubit());
 
         expect(find.textContaining('languages could not be loaded'), findsOne);

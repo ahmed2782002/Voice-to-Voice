@@ -59,6 +59,8 @@
   "theme_light": "Light",
   "language_arabic": "العربية",
   "language_english": "English",
+  "no_internet_title": "You're offline",
+  "no_internet_hint": "Check your Wi-Fi or mobile data. VoxBridge will come back as soon as you reconnect.",
   "splash_tagline": "Speak once. Be understood everywhere.",
   "ai_voice_label": "AI-generated voice",
   "import_audio": "Import audio file",

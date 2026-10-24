@@ -5,13 +5,12 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../../../core/utils/constants/app_colors.dart';
 import '../../../../../core/utils/constants/app_decorations.dart';
+import '../../../../../core/utils/constants/app_icons.dart';
 import '../../../../../core/utils/constants/app_strings.dart';
 import '../../../../../core/utils/constants/app_text.dart';
 import '../../../../../core/utils/format/duration_format.dart';
 import '../../view_model/translator_cubit.dart';
 import '../../view_model/translator_state.dart';
-import 'language_search_field.dart';
-import 'language_tile.dart';
 
 class LanguagePickerSheet extends StatelessWidget {
   const LanguagePickerSheet({super.key});
@@ -68,9 +67,26 @@ class LanguagePickerSheet extends StatelessWidget {
               style: context.text.caption,
             ),
             SizedBox(height: 12.h),
-            LanguageSearchField(
+            TextField(
+              key: const Key('translator_languageSearch'),
               controller: cubit.searchController,
               onChanged: cubit.onSearchChanged,
+              style: context.text.body,
+              cursorColor: context.colors.cyanBright,
+              decoration: InputDecoration(
+                hintText: AppStrings.searchLanguages.tr(),
+                hintStyle: context.text.label,
+                prefixIcon: Icon(
+                  AppIcons.search,
+                  color: context.colors.textMuted,
+                ),
+                filled: true,
+                fillColor: context.colors.surfaceRaised,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.field.r),
+                  borderSide: BorderSide.none,
+                ),
+              ),
             ),
             SizedBox(height: 8.h),
             Expanded(
@@ -90,15 +106,58 @@ class LanguagePickerSheet extends StatelessWidget {
                   }
                   return ListView.builder(
                     itemCount: languages.length,
-                    itemBuilder: (context, index) => LanguageTile(
-                      key: ValueKey('language_${languages[index].code}'),
-                      language: languages[index],
-                      selected: languages[index] == state.language,
-                      onTap: () {
-                        cubit.selectLanguage(languages[index]);
-                        Navigator.of(context).pop();
-                      },
-                    ),
+                    itemBuilder: (context, index) {
+                      final language = languages[index];
+                      final selected = language == state.language;
+                      return Material(
+                        key: ValueKey('language_${language.code}'),
+                        color: selected
+                            ? context.colors.accent.withValues(alpha: 0.22)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(AppRadii.field.r),
+                        child: InkWell(
+                          onTap: () {
+                            cubit.selectLanguage(language);
+                            Navigator.of(context).pop();
+                          },
+                          borderRadius: BorderRadius.circular(AppRadii.field.r),
+                          child: Container(
+                            constraints: BoxConstraints(minHeight: 52.h),
+                            padding: EdgeInsetsDirectional.symmetric(
+                              horizontal: 14.w,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        language.name,
+                                        style: context.text.body,
+                                      ),
+                                      if (language.nativeName != language.name)
+                                        Text(
+                                          language.nativeName,
+                                          style: context.text.caption,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                if (selected)
+                                  Icon(
+                                    AppIcons.check,
+                                    size: 22.r,
+                                    color: context.colors.cyanBright,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),

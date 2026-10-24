@@ -5,6 +5,7 @@ import 'package:voice_to_voice/core/services/audio/audio_file_picker.dart';
 import 'package:voice_to_voice/core/services/audio/audio_player_service.dart';
 import 'package:voice_to_voice/core/services/audio/audio_recorder_service.dart';
 import 'package:voice_to_voice/core/services/auth/access_token_provider.dart';
+import 'package:voice_to_voice/core/services/connectivity/connectivity_service.dart';
 import 'package:voice_to_voice/core/services/preferences/ai_notice_store.dart';
 import 'package:voice_to_voice/feature/history/data/model/translation_history_entry.dart';
 import 'package:voice_to_voice/feature/history/data/repo/translation_history_store.dart';
@@ -251,5 +252,32 @@ class FakeHistoryStore implements TranslationHistoryStore {
   Future<void> clear() async {
     clearCalls++;
     entries.clear();
+  }
+}
+
+class FailingAccessTokenProvider implements AccessTokenProvider {
+  FailingAccessTokenProvider(this.error);
+
+  final Exception error;
+
+  @override
+  Future<String> accessToken({bool forceRefresh = false}) async => throw error;
+}
+
+class FakeConnectivityService implements ConnectivityService {
+  FakeConnectivityService({this.online = true});
+
+  bool online;
+  final StreamController<bool> changes = StreamController<bool>.broadcast();
+
+  @override
+  Future<bool> isOnline() async => online;
+
+  @override
+  Stream<bool> get onlineChanges => changes.stream;
+
+  void emit(bool value) {
+    online = value;
+    changes.add(value);
   }
 }

@@ -15,6 +15,8 @@ enum AudioTrack { none, source, translated }
 
 enum LanguagesStatus { idle, loading, ready, failed }
 
+enum TranslatorMenuAction { history, language, theme }
+
 enum TranslatorFailure {
   permissionDenied,
   permissionPermanentlyDenied,
@@ -61,6 +63,7 @@ class TranslatorState extends Equatable {
     this.languagesStatus = LanguagesStatus.idle,
     this.showAiNotice = true,
     this.sourceIsImported = false,
+    this.isOffline = false,
   });
 
   final RecordStatus recordStatus;
@@ -82,6 +85,7 @@ class TranslatorState extends Equatable {
   final LanguagesStatus languagesStatus;
   final bool showAiNotice;
   final bool sourceIsImported;
+  final bool isOffline;
 
   bool get isRecording => recordStatus == RecordStatus.recording;
   bool get hasSource => recordStatus == RecordStatus.recorded;
@@ -207,6 +211,7 @@ class TranslatorState extends Equatable {
     LanguagesStatus? languagesStatus,
     bool? showAiNotice,
     bool? sourceIsImported,
+    bool? isOffline,
   }) {
     return TranslatorState(
       recordStatus: recordStatus ?? this.recordStatus,
@@ -228,6 +233,7 @@ class TranslatorState extends Equatable {
       languagesStatus: languagesStatus ?? this.languagesStatus,
       showAiNotice: showAiNotice ?? this.showAiNotice,
       sourceIsImported: sourceIsImported ?? this.sourceIsImported,
+      isOffline: isOffline ?? this.isOffline,
     );
   }
 
@@ -252,5 +258,6 @@ class TranslatorState extends Equatable {
     languagesStatus,
     showAiNotice,
     sourceIsImported,
+    isOffline,
   ];
 }

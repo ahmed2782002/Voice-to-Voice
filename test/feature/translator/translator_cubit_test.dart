@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_to_voice/core/network/network_exception.dart';
 import 'package:voice_to_voice/core/services/audio/audio_recorder_service.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translation_language.dart';
 import 'package:voice_to_voice/feature/translator/data/model/translation_result.dart';
@@ -22,6 +23,7 @@ void main() {
   late FakeAiNoticeStore aiNotice;
   late FakeAudioFilePicker picker;
   late FakeHistoryStore history;
+  late FakeConnectivityService connectivity;
   late TranslatorCubit cubit;
 
   setUp(() {
@@ -33,6 +35,7 @@ void main() {
     aiNotice = FakeAiNoticeStore();
     picker = FakeAudioFilePicker();
     history = FakeHistoryStore();
+    connectivity = FakeConnectivityService();
     cubit = TranslatorCubit(
       recorder: recorder,
       player: player,
@@ -40,6 +43,7 @@ void main() {
       loadLanguages: languages.call,
       picker: picker,
       saveToHistory: history.save,
+      connectivity: connectivity,
       aiNotice: aiNotice,
       clock: clock.call,
     );
@@ -212,7 +216,7 @@ void main() {
 
       test('does not save a failed translation', () async {
         await record();
-        translator.error = const SocketException('offline');
+        translator.error = const NoConnectionException('offline');
 
         await cubit.translate();
         await flush();
@@ -245,7 +249,7 @@ void main() {
       );
 
       test('reports a load failure and reloads on retry', () async {
-        languages.error = const SocketException('offline');
+        languages.error = const NoConnectionException('offline');
         await cubit.loadLanguages();
 
         expect(cubit.state.failure, TranslatorFailure.languagesFailed);
@@ -265,6 +269,85 @@ void main() {
         await record();
 
         expect(cubit.state.languages, SampleLanguages.all);
+      });
+    });
+
+    group('connectivity', () {
+      test('starts online when the device has a network', () async {
+        await flush();
+
+        expect(cubit.state.isOffline, isFalse);
+      });
+
+      test('marks the state offline when the network drops', () async {
+        connectivity.emit(false);
+        await flush();
+
+        expect(cubit.state.isOffline, isTrue);
+
+        connectivity.emit(true);
+        await flush();
+
+        expect(cubit.state.isOffline, isFalse);
+      });
+
+      test('starts offline when the device has no network', () async {
+        final offlineCubit = TranslatorCubit(
+          recorder: FakeAudioRecorderService(),
+          player: FakeAudioPlayerService(),
+          translate: translator.call,
+          loadLanguages: languages.call,
+          picker: picker,
+          saveToHistory: history.save,
+          connectivity: FakeConnectivityService(online: false),
+          aiNotice: aiNotice,
+        );
+        addTearDown(offlineCubit.close);
+        await flush();
+
+        expect(offlineCubit.state.isOffline, isTrue);
+      });
+
+      test('stops an active recording when the network drops', () async {
+        await cubit.startRecording();
+        expect(cubit.state.isRecording, isTrue);
+
+        connectivity.emit(false);
+        await flush();
+        await flush();
+
+        expect(cubit.state.isRecording, isFalse);
+        expect(cubit.state.isOffline, isTrue);
+      });
+
+      test('ignores errors from the connectivity stream', () async {
+        connectivity.changes.addError(StateError('no plugin'));
+        await flush();
+
+        expect(cubit.state.isOffline, isFalse);
+      });
+
+      test('keeps the offline flag after a new recording starts', () async {
+        connectivity.emit(false);
+        await flush();
+
+        await record();
+
+        expect(cubit.state.isOffline, isTrue);
+      });
+
+      test('reloads failed languages once the network is back', () async {
+        connectivity.emit(false);
+        languages.error = const NoConnectionException('offline');
+        await cubit.loadLanguages();
+        languages.error = null;
+
+        connectivity.emit(true);
+        await flush();
+        await flush();
+
+        expect(languages.calls, 2);
+        expect(cubit.state.languagesStatus, LanguagesStatus.ready);
       });
     });
 
@@ -363,7 +446,7 @@ void main() {
 
       test('keeps the AI notice when the first translation fails', () async {
         await record();
-        translator.error = const SocketException('offline');
+        translator.error = const NoConnectionException('offline');
 
         await cubit.translate();
 
@@ -379,6 +462,7 @@ void main() {
           loadLanguages: languages.call,
           picker: picker,
           saveToHistory: history.save,
+          connectivity: connectivity,
           aiNotice: FakeAiNoticeStore(seen: true),
         );
         addTearDown(seenCubit.close);

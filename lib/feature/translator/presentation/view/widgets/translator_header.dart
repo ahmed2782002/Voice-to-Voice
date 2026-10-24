@@ -13,7 +13,7 @@ import '../../../../../core/widgets/settings_sheet/language_sheet.dart';
 import '../../../../../core/widgets/settings_sheet/theme_sheet.dart';
 import '../../../../history/presentation/view/screen/history_screen.dart';
 import '../../view_model/translator_cubit.dart';
-import '../../view_model/translator_menu_action.dart';
+import '../../view_model/translator_state.dart';
 
 class TranslatorHeader extends StatelessWidget {
   const TranslatorHeader({super.key});

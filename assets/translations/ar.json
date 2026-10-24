@@ -59,6 +59,8 @@
   "theme_light": "فاتح",
   "language_arabic": "العربية",
   "language_english": "English",
+  "no_internet_title": "لا يوجد اتصال بالإنترنت",
+  "no_internet_hint": "تحقق من الواي فاي أو بيانات الهاتف، وسيعود التطبيق للعمل فور عودة الاتصال.",
   "splash_tagline": "تكلّم بلغتك، ويفهمك العالم.",
   "ai_voice_label": "صوت مولّد بالذكاء الاصطناعي",
   "import_audio": "استيراد ملف صوتي",

@@ -19,24 +19,27 @@ Tests follow `lib/core/doc/code_test/WIDGET_TEST_GUIDELINES.md`, `UNIT_TEST_GUID
 
 ```
 lib/core/config/                SupabaseConfig (project URL, publishable key, functions URL)
-lib/core/services/audio/        recorder, player and file picker interfaces plus device implementations, limits, import formats
+lib/core/network/               DioClient (timeouts, JSON decode, error mapping), Endpoints, NetworkException, auth/retry/logging interceptors
+lib/core/services/audio/        recorder, player and file picker interfaces plus device implementations, limits, import formats, AudioFormat (extension and MIME mapping), AudioFileStore (writes audio bytes to temp files)
+lib/core/services/connectivity/ ConnectivityService, DeviceConnectivityService (connectivity_plus, online when any network is up)
 lib/core/services/auth/         AccessTokenProvider, SupabaseSessionService (silent anonymous sign-in)
 lib/core/services/preferences/  AiNoticeStore, PreferencesAiNoticeStore (AI notice shown until the first translation)
 lib/core/routing/               FadeRoute
 lib/core/theme/                 AppTheme (light and dark ThemeData), ThemeCubit (saved ThemeMode)
 lib/core/utils/constants/       AppPalette (dark and light), AppColors (context.colors), AppText (context.text), AppIcons, AppStrings, AppRadii
 lib/core/utils/format/          DurationFormat (localized digits)
-lib/core/widgets/               GlassCard, AudioWaveform, AudioControlButton, AppLogo, PulseRingsPainter, settings sheets (language, theme)
+lib/core/widgets/               GlassCard, AudioWaveform, AudioControlButton, AppLogo, PulseRingsPainter, settings sheets (language cards with flags, theme cards with previews), NoConnectionView (full-page offline state with animated wifi-off)
 lib/feature/splash/             SplashScreen, SplashStage, SplashMotion (pure animation curves)
 lib/feature/history/            local translation history: TranslationHistoryEntry, FileTranslationHistoryStore, HistoryCubit, HistoryScreen
 lib/feature/translator/
   data/model/                   TranslationLanguage, TranslationResult, TranslatorApiException
-  data/repo/                    TranslatorRepo (GET /languages, POST /translate-voice)
+  data/repo/                    TranslatorRepo (GET /languages, POST /translate-voice through DioClient)
   presentation/view/screen/     TranslatorScreen
   presentation/view/widgets/    one public widget per file
   presentation/view_model/      TranslatorCubit, TranslatorState
 assets/translations/            en.json, ar.json (easy_localization)
 test/helpers/                   fakes.dart, pump_app.dart
+integration_test/               app launch, translation, offline and settings flows on a device: fake server, mic, speaker and connectivity, real storage and UI (flutter test integration_test -d <device>)
 test/feature/translator/        widget, cubit and repo tests
 test/feature/splash/            splash motion and screen tests
 test/core/theme/                ThemeCubit tests

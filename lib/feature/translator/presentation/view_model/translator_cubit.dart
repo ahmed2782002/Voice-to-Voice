@@ -1,14 +1,15 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/network/network_exception.dart';
 import '../../../../core/services/audio/audio_file_picker.dart';
 import '../../../../core/services/audio/audio_limits.dart';
 import '../../../../core/services/audio/audio_player_service.dart';
 import '../../../../core/services/audio/audio_recorder_service.dart';
+import '../../../../core/services/connectivity/connectivity_service.dart';
 import '../../../../core/services/preferences/ai_notice_store.dart';
 import '../../data/model/translation_language.dart';
 import '../../data/model/translation_result.dart';
@@ -23,6 +24,7 @@ class TranslatorCubit extends Cubit<TranslatorState> {
     required this._loadLanguages,
     required this._picker,
     required this._saveToHistory,
+    required this._connectivity,
     required AiNoticeStore aiNotice,
     DateTime Function()? clock,
   }) : _aiNotice = aiNotice,
@@ -31,6 +33,11 @@ class TranslatorCubit extends Cubit<TranslatorState> {
     _positionSubscription = _player.positionChanges.listen(_onPosition);
     _playingSubscription = _player.playingChanges.listen(_onPlaying);
     _lifecycle = AppLifecycleListener(onPause: pauseEverything);
+    _connectivitySubscription = _connectivity.onlineChanges.listen(
+      _onConnectivity,
+      onError: (Object _) {},
+    );
+    unawaited(checkConnectivity());
   }
 
   final AudioRecorderService _recorder;
@@ -40,11 +47,13 @@ class TranslatorCubit extends Cubit<TranslatorState> {
   final LoadLanguages _loadLanguages;
   final AudioFilePicker _picker;
   final SaveTranslation _saveToHistory;
+  final ConnectivityService _connectivity;
   final TextEditingController searchController = TextEditingController();
   final DateTime Function() _clock;
   DateTime? _startedAt;
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<bool>? _playingSubscription;
+  StreamSubscription<bool>? _connectivitySubscription;
   AppLifecycleListener? _lifecycle;
   StreamSubscription<double>? _amplitudeSubscription;
   bool _recordingTransition = false;
@@ -109,6 +118,7 @@ class TranslatorCubit extends Cubit<TranslatorState> {
           languages: state.languages,
           languagesStatus: state.languagesStatus,
           showAiNotice: state.showAiNotice,
+          isOffline: state.isOffline,
         ),
       );
     } catch (_) {
@@ -144,6 +154,7 @@ class TranslatorCubit extends Cubit<TranslatorState> {
           languages: state.languages,
           languagesStatus: state.languagesStatus,
           showAiNotice: state.showAiNotice,
+          isOffline: state.isOffline,
         ),
       );
       _amplitudeSubscription = _recorder.amplitudeChanges.listen(_onAmplitude);
@@ -186,6 +197,7 @@ class TranslatorCubit extends Cubit<TranslatorState> {
             languages: state.languages,
             languagesStatus: state.languagesStatus,
             showAiNotice: state.showAiNotice,
+            isOffline: state.isOffline,
           ),
         );
         return;
@@ -226,6 +238,7 @@ class TranslatorCubit extends Cubit<TranslatorState> {
         languages: state.languages,
         languagesStatus: state.languagesStatus,
         showAiNotice: state.showAiNotice,
+        isOffline: state.isOffline,
       ),
     );
   }
@@ -486,8 +499,9 @@ class TranslatorCubit extends Cubit<TranslatorState> {
 
   TranslatorFailure _translationFailure(Object error) => switch (error) {
     TranslatorApiException(:final code) => _apiFailure(code),
-    TimeoutException() => TranslatorFailure.timeout,
-    SocketException() => TranslatorFailure.network,
+    TimeoutException() ||
+    RequestTimeoutException() => TranslatorFailure.timeout,
+    NoConnectionException() => TranslatorFailure.network,
     _ => TranslatorFailure.server,
   };
 
@@ -545,12 +559,30 @@ class TranslatorCubit extends Cubit<TranslatorState> {
     }
   }
 
+  Future<void> checkConnectivity() async {
+    try {
+      _onConnectivity(await _connectivity.isOnline());
+    } catch (_) {
+      return;
+    }
+  }
+
+  void _onConnectivity(bool online) {
+    if (isClosed || state.isOffline == !online) return;
+    if (!online) unawaited(pauseEverything());
+    emit(state.copyWith(isOffline: !online));
+    if (online && state.languagesStatus == LanguagesStatus.failed) {
+      loadLanguages();
+    }
+  }
+
   @override
   Future<void> close() async {
     _lifecycle?.dispose();
     await _amplitudeSubscription?.cancel();
     await _positionSubscription?.cancel();
     await _playingSubscription?.cancel();
+    await _connectivitySubscription?.cancel();
     if (state.isRecording) await _recorder.cancel();
     await _player.dispose();
     await _deleteRecordings();
