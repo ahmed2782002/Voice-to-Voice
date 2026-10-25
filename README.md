@@ -65,12 +65,12 @@ Translation runs through real OpenAI models behind a Supabase Edge Functions bac
 | Dart | 3.13.1 |
 | Android | `minSdk` 24 (Flutter default), `compileSdk` 37 |
 
-Main packages: `flutter_bloc`, `equatable`, `supabase_flutter`, `http`, `record`, `just_audio`, `permission_handler`, `path_provider`, `file_picker`, `shared_preferences`, `easy_localization`, `flutter_screenutil`, `shimmer`, `flutter_native_splash`. Dev: `bloc_test`, `flutter_launcher_icons`.
+Main packages: `flutter_bloc`, `equatable`, `supabase_flutter`, `dio`, `connectivity_plus`, `record`, `just_audio`, `permission_handler`, `path_provider`, `file_picker`, `shared_preferences`, `easy_localization`, `flutter_screenutil`, `shimmer`, `flutter_native_splash`. Dev: `bloc_test`, `flutter_launcher_icons`.
 
 ## Setup and run
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ahmed2782002/Voice-to-Voice.git
 cd Voice_to_Voice
 flutter pub get
 flutter run
@@ -135,7 +135,15 @@ Platform configuration:
 
 ## Backend service
 
-The supporting service is a set of Supabase Edge Functions. **Source code and setup instructions: `<link or path to supabase/functions>`.**
+The supporting service is a set of Supabase Edge Functions (`languages` and `translate-voice`) deployed on project `fvxeleurmrxwieqokxpv`.
+
+| | Link |
+|---|---|
+| App repository | https://github.com/ahmed2782002/Voice-to-Voice |
+| Edge Functions (Supabase dashboard, project members only) | https://supabase.com/dashboard/project/fvxeleurmrxwieqokxpv/functions |
+| Functions base URL used by the app | `https://fvxeleurmrxwieqokxpv.supabase.co/functions/v1` |
+
+The OpenAI key is stored as an Edge Function secret in that project and is never sent to the app.
 
 Contract used by the app:
 
@@ -165,11 +173,13 @@ Access is restricted to signed-in Supabase users: the app signs in anonymously a
 
 ## Models used
 
-| Step | Model |
-|---|---|
-| Speech to text, with language detection | `<transcription model ID>` |
-| Text translation | `<translation model ID>` |
-| Text to speech | `<speech model ID>`, voice `<voice>` |
+All three steps call the OpenAI API from the `translate-voice` Edge Function:
+
+| Step | Model | OpenAI endpoint | Settings |
+|---|---|---|---|
+| Speech to text (STT), with language detection | `gpt-4o-transcribe` | `POST /v1/audio/transcriptions` | — |
+| Text translation | `gpt-4o-mini` | `POST /v1/chat/completions` | `temperature: 0`, JSON response |
+| Text to speech (TTS) | `gpt-4o-mini-tts` | `POST /v1/audio/speech` | voice `alloy`, MP3 output |
 
 The backend returns the translated speech as `audio/mpeg`. The app adds no other AI model or third-party AI service.
 
